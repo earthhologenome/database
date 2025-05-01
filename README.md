@@ -5,3 +5,7 @@ This is the code source of the EHI Data browser. Data are stored in an internal 
 ```
 python csv_to_js.py specimens.csv mags.csv > data.js
 ```
+
+The rendered version is accessible in:
+
+http://www.earthhologenome.org/database

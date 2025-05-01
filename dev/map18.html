@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Fully Synchronized Cross-Filtered Map and Tables with SampleType Tags and MAG Table</title>
+
+  <!-- Plotly -->
+  <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+
+  <!-- jQuery and DataTables -->
+  <script src="https://code.jquery.com/jquery-3.5.1.js"></script>
+  <link rel="stylesheet" href="https://cdn.datatables.net/1.10.21/css/jquery.dataTables.min.css">
+  <script src="https://cdn.datatables.net/1.10.21/js/jquery.dataTables.min.js"></script>
+
+  <style>
+    body { font-family: Arial, sans-serif; margin: 40px; }
+    #map { height: 600px; margin-bottom: 20px; }
+    .filter-container { margin-bottom: 20px; }
+    .button-container { margin-bottom: 20px; }
+    table.dataTable tfoot input { width: 100%; box-sizing: border-box; }
+    /* Hidden ID column */
+    th.hidden, td.hidden { display: none; }
+    /* Tag styles */
+    .sample-tag {
+      display: inline-block;
+      padding: 2px 6px;
+      margin-right: 4px;
+      border-radius: 4px;
+      color: #fff;
+      font-size: 0.9em;
+    }
+  </style>
+</head>
+<body>
+
+<h1>Fully Synchronized Cross-Filtered Map and Tables with SampleType Tags and MAG Table</h1>
+
+<div id="map"></div>
+
+<div class="filter-container">
+  <label for="speciesFilter">Filter by Species: </label>
+  <select id="speciesFilter">
+    <option value="">All Species</option>
+  </select>
+</div>
+
+<div class="button-container">
+  <button onclick="resetFilters()">Reset Filters</button>
+</div>
+
+<h2>Specimen Table</h2>
+<table id="specimenTable" class="display">
+  <thead>
+    <tr>
+      <th class="hidden">LocationID</th>
+      <th>Species</th>
+      <th>Family</th>
+      <th>Order</th>
+      <th>Country</th>
+      <th>Sample Type</th>
+      <th>Total Data</th>
+    </tr>
+  </thead>
+  <tfoot>
+    <tr>
+      <th class="hidden"></th>
+      <th>Species</th>
+      <th>Family</th>
+      <th>Order</th>
+      <th>Country</th>
+      <th>Sample Type</th>
+      <th>Total Data</th>
+    </tr>
+  </tfoot>
+  <tbody></tbody>
+</table>
+
+<h2>MAG Table</h2>
+<table id="magTable" class="display">
+  <thead>
+    <tr>
+      <th>MAGID</th>
+      <th class="hidden">LocationID</th>
+      <th>Species</th>
+      <th>Family</th>
+      <th>Order</th>
+      <th>Class</th>
+      <th>Phylum</th>
+      <th>Completeness</th>
+      <th>Contamination</th>
+      <th>Link</th>
+    </tr>
+  </thead>
+  <tfoot>
+    <tr>
+      <th>MAGID</th>
+      <th class="hidden"></th>
+      <th>Species</th>
+      <th>Family</th>
+      <th>Order</th>
+      <th>Class</th>
+      <th>Phylum</th>
+      <th>Completeness</th>
+      <th>Contamination</th>
+      <th>Link</th>
+    </tr>
+  </tfoot>
+  <tbody></tbody>
+</table>
+
+<script>
+  // Color mapping for sample tags
+  var typeColors = {
+    'Tissue': '#5cb85c',
+    'Blood':  '#d9534f',
+    'Water':  '#5bc0de',
+    'Soil':   '#f0ad4e',
+    'Air':    '#428bca',
+    'Fur':    '#9b59b6'
+  };
+
+  var specimensData = [
+    { LocationID: 'LOC001', Species: 'Bear',   Family: 'Ursidae',   Order: 'Carnivora',   Country: 'USA', SampleType: 'Tissue,Blood', TotalData: 120, Latitude: 37.7749, Longitude: -122.4194 },
+    { LocationID: 'LOC002', Species: 'Deer',   Family: 'Cervidae',  Order: 'Artiodactyla',Country: 'USA', SampleType: 'Blood',       TotalData: 85,  Latitude: 34.0522, Longitude: -118.2437 },
+    { LocationID: 'LOC003', Species: 'Fox',    Family: 'Canidae',   Order: 'Carnivora',   Country: 'USA', SampleType: 'Fur,Water',  TotalData: 60,   Latitude: 40.7128, Longitude: -74.0060 },
+    { LocationID: 'LOC004', Species: 'Rabbit', Family: 'Leporidae', Order: 'Lagomorpha', Country: 'USA', SampleType: 'Tissue',      TotalData: 45,  Latitude: 41.8781, Longitude: -87.6298 }
+  ];
+
+  var magsData = [
+    { MAGID: 'MAG001', LocationID: 'LOC001', Species: 'Bear',   Family: 'Lactobacillaceae',   Order: 'Carnivora',   Class: 'Mammalia', Phylum: 'Chordata', Completeness: 95, Contamination: 2.5, Link: '<a href="#" target="_blank">Details</a>' },
+    { MAGID: 'MAG002', LocationID: 'LOC002', Species: 'Deer',   Family: 'Lactobacillaceae',  Order: 'Artiodactyla',Class: 'Mammalia', Phylum: 'Chordata', Completeness: 90, Contamination: 1.8, Link: '<a href="#" target="_blank">Details</a>' },
+    { MAGID: 'MAG003', LocationID: 'LOC003', Species: 'Fox',    Family: 'Pseudomonaceae',   Order: 'Carnivora',   Class: 'Mammalia', Phylum: 'Chordata', Completeness: 92, Contamination: 3.1, Link: '<a href="#" target="_blank">Details</a>' },
+    { MAGID: 'MAG004', LocationID: 'LOC004', Species: 'Rabbit', Family: 'Pseudomonaceae', Order: 'Lagomorpha', Class: 'Mammalia', Phylum: 'Chordata', Completeness: 88, Contamination: 2.2, Link: '<a href="#" target="_blank">Details</a>' }
+  ];
+
+  var specimenTable, magTable;
+  var activeLocationIDs = null;
+
+  $(document).ready(function() {
+    // Populate specimen table with tags
+    specimensData.forEach(row => {
+      var tags = row.SampleType.split(',').map(t => {
+        var key = t.trim();
+        var color = typeColors[key] || '#999';
+        return '<span class="sample-tag" style="background-color:' + color + '">' + key + '</span>';
+      }).join(' ');
+      $('#specimenTable tbody').append(
+        '<tr>' +
+          '<td class="hidden">' + row.LocationID + '</td>' +
+          '<td>' + row.Species + '</td>' +
+          '<td>' + row.Family  + '</td>' +
+          '<td>' + row.Order   + '</td>' +
+          '<td>' + row.Country + '</td>' +
+          '<td>' + tags        + '</td>' +
+          '<td>' + row.TotalData + '</td>' +
+        '</tr>'
+      );
+    });
+
+    // Populate MAG table
+    magsData.forEach(row => {
+      $('#magTable tbody').append(
+        '<tr>' +
+          '<td>' + row.MAGID        + '</td>' +
+          '<td class="hidden">' + row.LocationID   + '</td>' +
+          '<td>' + row.Species      + '</td>' +
+          '<td>' + row.Family       + '</td>' +
+          '<td>' + row.Order        + '</td>' +
+          '<td>' + row.Class        + '</td>' +
+          '<td>' + row.Phylum       + '</td>' +
+          '<td>' + row.Completeness + '</td>' +
+          '<td>' + row.Contamination + '</td>' +
+          '<td>' + row.Link          + '</td>' +
+        '</tr>'
+      );
+    });
+
+    // Add search inputs
+    $('#specimenTable tfoot th').each(function(i) {
+      $(this).html(i === 0 ? '' : '<input type="text" placeholder="Search ' + $(this).text() + '" />');
+    });
+    $('#magTable tfoot th').each(function(i) {
+      $(this).html(i === 1 ? '' : '<input type="text" placeholder="Search ' + $(this).text() + '" />');
+    });
+
+    // Initialize DataTables
+    specimenTable = $('#specimenTable').DataTable({
+      initComplete: function() {
+        this.api().columns().every(function(idx) {
+          $('input', this.footer()).on('keyup change clear', function() {
+            specimenTable.column(idx).search(this.value).draw(); crossFilter();
+          });
+        });
+      }
+    });
+
+    magTable = $('#magTable').DataTable({
+      initComplete: function() {
+        this.api().columns().every(function(idx) {
+          $('input', this.footer()).on('keyup change clear', function() {
+            magTable.column(idx).search(this.value).draw(); crossFilter();
+          });
+        });
+      }
+    });
+
+    // Species filter
+    var speciesSet = new Set(specimensData.map(d => d.Species));
+    speciesSet.forEach(s => $('#speciesFilter').append('<option value="' + s + '">' + s + '</option>'));
+    $('#speciesFilter').on('change', function() { specimenTable.column(1).search(this.value).draw(); crossFilter(); });
+
+    // Cross-filter logic
+    $.fn.dataTable.ext.search.push(function(settings, data) {
+      if (!activeLocationIDs) return true;
+      if (settings.nTable.id === 'specimenTable') return activeLocationIDs.includes(data[0]);
+      if (settings.nTable.id === 'magTable')       return activeLocationIDs.includes(data[1]);
+      return true;
+    });
+
+    updateMap(specimensData);
+  });
+
+  function crossFilter() {
+    var locs = new Set(); specimenTable.rows({ filter: 'applied' }).every(function() { locs.add(this.data()[0]); });
+    var magLocs = new Set(); magTable.rows({ filter: 'applied' }).every(function() { magLocs.add(this.data()[1]); });
+    activeLocationIDs = [...locs].filter(id => magLocs.has(id));
+    specimenTable.draw(); magTable.draw();
+    var filtered = activeLocationIDs.length ? specimensData.filter(d => activeLocationIDs.includes(d.LocationID)) : specimensData;
+    updateMap(filtered);
+  }
+
+  function updateMap(data) {
+    var colors = { 'Bear':'#636EFA','Deer':'#EF553B','Fox':'#00CC96','Rabbit':'#AB63FA' };
+    var trace = { type:'scattermapbox', lat:data.map(d=>d.Latitude), lon:data.map(d=>d.Longitude), text:data.map(d=>d.Species), customdata:data.map(d=>d.LocationID), mode:'markers', marker:{ size:12, color:data.map(d=>colors[d.Species]||'#AAAAAA')}, cluster:{ enabled:true,maxzoom:14,step:50 }};
+    var layout = { mapbox:{ style:'open-street-map', center:{ lat:39, lon:-98 }, zoom:3 }, margin:{ t:0,b:0,l:0,r:0 }, height:600 };
+    Plotly.newPlot('map',[trace],layout).then(plot => {
+      var mapDiv=document.getElementById('map');
+      mapDiv.on('plotly_selected', evt => { activeLocationIDs = evt&&evt.points.length ? evt.points.map(pt=>pt.customdata) : null; specimenTable.draw(); magTable.draw(); updateMap(activeLocationIDs? specimensData.filter(d=>activeLocationIDs.includes(d.LocationID)) : specimensData); });
+      mapDiv.on('plotly_click',    evt => { activeLocationIDs = evt&&evt.points.length ? [evt.points[0].customdata] : null; specimenTable.draw(); magTable.draw(); updateMap(activeLocationIDs? specimensData.filter(d=>activeLocationIDs.includes(d.LocationID)) : specimensData); });
+    });
+  }
+
+  function resetFilters() {
+    $('#speciesFilter').val(''); activeLocationIDs=null;
+    specimenTable.search('').columns().search('').draw(); magTable.search('').columns().search('').draw();
+    updateMap(specimensData);
+  }
+</script>
+
+</body>
+</html>

@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Cross-Filtered Map and Tables with Range Sliders and CSV Export</title>
+
+  <!-- Plotly -->
+  <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+
+  <!-- jQuery, jQuery UI, and DataTables -->
+  <script src="https://code.jquery.com/jquery-3.5.1.js"></script>
+  <link rel="stylesheet" href="https://code.jquery.com/ui/1.12.1/themes/base/jquery-ui.css">
+  <link rel="stylesheet" href="https://cdn.datatables.net/1.10.21/css/jquery.dataTables.min.css">
+
+  <!-- DataTables Buttons CSS -->
+  <link rel="stylesheet" href="https://cdn.datatables.net/buttons/1.6.2/css/buttons.dataTables.min.css">
+
+  <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.min.js"></script>
+  <script src="https://cdn.datatables.net/1.10.21/js/jquery.dataTables.min.js"></script>
+
+  <!-- DataTables Buttons and CSV export JS -->
+  <script src="https://cdn.datatables.net/buttons/1.6.2/js/dataTables.buttons.min.js"></script>
+  <script src="https://cdn.datatables.net/buttons/1.6.2/js/buttons.html5.min.js"></script>
+
+  <script src="data.js"></script>
+
+  <style>
+    body { font-family: Arial, sans-serif; margin: 40px; }
+    #map { height: 600px; margin-bottom: 20px; }
+    .filter-container { margin-bottom: 20px; }
+    .button-container { margin-bottom: 20px; }
+    table.dataTable tfoot div.slider { margin: 5px 0; }
+    table.dataTable tfoot .slider-labels { font-size: 0.9em; margin-bottom: 8px; }
+    table.dataTable tfoot .slider-labels span { margin: 0 4px; }
+    th.hidden, td.hidden { display: none; }
+    .sample-tag { display: inline-block; padding: 2px 6px; margin-right: 4px; border-radius: 4px; color: #fff; font-size: 0.9em; }
+    .taxonomy-tag { display: inline-block; padding: 2px 6px; margin-right: 4px; border-radius: 4px; color: #fff; font-size: 0.9em; }
+  </style>
+</head>
+<body>
+
+<h1>Cross-Filtered Map and Tables with Range Sliders and CSV Export</h1>
+
+<div id="map"></div>
+
+<div class="filter-container">
+  <label for="speciesFilter">Filter by Species: </label>
+  <select id="speciesFilter"><option value="">All Species</option></select>
+  <label for="biomeFilter" style="margin-left:20px;">Filter by Biome: </label>
+  <select id="biomeFilter"><option value="">All Biomes</option></select>
+</div>
+
+<div class="button-container">
+  <button onclick="resetFilters()">Reset Filters</button>
+</div>
+
+<h2>Specimen Table</h2>
+<table id="specimenTable" class="display">
+  <thead>
+    <tr>
+      <th class="hidden">specimenID</th>
+      <th>Species</th>
+      <th class="hidden">Family</th>
+      <th>Order</th>
+      <th>Class</th>
+      <th class="hidden">Length</th>
+      <th class="hidden">Weight</th>
+      <th>Country</th>
+      <th>Biome</th>
+      <th>Sample Type</th>
+      <th>Total Data</th>
+      <th class="hidden">Host Data</th>
+      <th class="hidden">Metagenomic Data</th>
+      <th class="hidden">Release</th>
+      <th>MAG Count</th>
+    </tr>
+  </thead>
+  <tfoot>
+    <tr>
+      <th class="hidden"></th>
+      <th>Species</th>
+      <th class="hidden"></th>
+      <th>Order</th>
+      <th>Class</th>
+      <th class="hidden"></th>
+      <th class="hidden"></th>
+      <th>Country</th>
+      <th>Biome</th>
+      <th>Sample Type</th>
+      <th><div class="slider-labels"><span id="labelSpecDataMin"></span>–<span id="labelSpecDataMax"></span></div><div id="sliderSpecData" class="slider"></div></th>
+      <th class="hidden"></th>
+      <th class="hidden"></th>
+      <th class="hidden"></th>
+      <th><div class="slider-labels"><span id="labelSpecMagMin"></span>–<span id="labelSpecMagMax"></span></div><div id="sliderSpecMag" class="slider"></div></th>
+    </tr>
+  </tfoot>
+  <tbody></tbody>
+</table>
+
+<h2>MAG Table</h2>
+<table id="magTable" class="display">
+  <thead>
+    <tr>
+      <th>MAGID</th><th class="hidden">specimenID</th><th>Species</th><th>Family</th><th>Order</th><th>Class</th><th>Phylum</th><th>Completeness</th><th>Contamination</th><th>Link</th>
+    </tr>
+  </thead>
+  <tfoot>
+    <tr>
+      <th>MAGID</th><th class="hidden"></th><th>Species</th><th>Family</th><th>Order</th><th>Class</th><th>Phylum</th>
+      <th><div class="slider-labels"><span id="labelMagCompMin"></span>–<span id="labelMagCompMax"></span></div><div id="sliderMagComp" class="slider"></div></th>
+      <th><div class="slider-labels"><span id="labelMagContMin"></span>–<span id="labelMagContMax"></span></div><div id="sliderMagCont" class="slider"></div></th>
+      <th>Link</th>
+    </tr>
+  </tfoot>
+  <tbody></tbody>
+</table>
+
+<script>
+  const typeColors={Tissue:'#5cb85c',Blood:'#d9534f',Water:'#5bc0de',Soil:'#f0ad4e',Air:'#428bca',Fur:'#9b59b6',Antler:'#e67e22'};
+  const classColors={Mammalia:'#9b59b6'};
+  const linked=specimensData.slice(0,10);
+  let specimenTable,magTable,activeIDs=null;
+  $(function(){
+    const $specBody=$('#specimenTable tbody'),$magBody=$('#magTable tbody');
+    specimensData.forEach(r=>{
+      const classTag=`<span class="sample-tag taxonomy-tag" style="background-color:${classColors[r.Class]}">${r.Class}</span>`;
+      const tags=r.SampleType.map(t=>`<span class="sample-tag" style="background-color:${typeColors[t]}">${t}</span>`).join(' ');
+      const count=magsData.filter(m=>m.specimenID===r.specimenID).length;
+      $specBody.append(`<tr><td class="hidden">${r.specimenID}</td><td>${r.Species}</td><td class="hidden">${r.Family}</td><td>${r.Order}</td><td>${classTag}</td><td class="hidden">${r.Length}</td><td class="hidden">${r.Weight}</td><td>${r.Country}</td><td>${r.Biome}</td><td>${tags}</td><td>${r.TotalData}</td><td class="hidden">${r.HostData}</td><td class="hidden">${r.MetagenomicData}</td><td class="hidden">${r.Release}</td><td>${count}</td></tr>`);
+    });
+    magsData.forEach(r=>$magBody.append(`<tr><td>${r.MAGID}</td><td class="hidden">${r.specimenID}</td><td>${r.Species}</td><td>${r.Family}</td><td>${r.Order}</td><td>${r.Class}</td><td>${r.Phylum}</td><td>${r.Completeness}</td><td>${r.Contamination}</td><td>${r.Link}</td></tr>`));
+    // Populate dropdowns
+    new Set(specimensData.map(d=>d.Species)).forEach(s=>$('#speciesFilter').append(`<option value="${s}">${s}</option>`));
+    new Set(specimensData.map(d=>d.Biome)).forEach(b=>$('#biomeFilter').append(`<option value="${b}">${b}</option>`));
+    // Footer filters
+    $('#specimenTable tfoot th').each(function(){
+      const $th = $(this);
+      // skip any column marked hidden, or any footer-cell that contains a slider
+      if ($th.hasClass('hidden') || $th.find('.slider').length) return;
+      // otherwise inject a search box
+      const title = $th.text().trim();
+      $th.html(`<input type="text" placeholder="Search ${title}"/>`);
+    });
+
+    $('#magTable tfoot th').each(function(){
+      const $th = $(this);
+      if ($th.hasClass('hidden') || $th.find('.slider').length) return;
+      const title = $th.text().trim();
+      $th.html(`<input type="text" placeholder="Search ${title}"/>`);
+    });
+    // Sliders
+    const tdVals=specimensData.map(d=>d.TotalData);
+    $('#sliderSpecData').slider({range:true,min:Math.min(...tdVals),max:Math.max(...tdVals),values:[Math.min(...tdVals),Math.max(...tdVals)],slide:(e,u)=>{$('#labelSpecDataMin').text(u.values[0]);$('#labelSpecDataMax').text(u.values[1]);specimenTable.draw();crossFilter();}});
+    $('#labelSpecDataMin').text($('#sliderSpecData').slider('values')[0]);$('#labelSpecDataMax').text($('#sliderSpecData').slider('values')[1]);
+    const mcVals=specimensData.map(r=>magsData.filter(m=>m.specimenID===r.specimenID).length);
+    $('#sliderSpecMag').slider({range:true,min:Math.min(...mcVals),max:Math.max(...mcVals),values:[Math.min(...mcVals),Math.max(...mcVals)],slide:(e,u)=>{$('#labelSpecMagMin').text(u.values[0]);$('#labelSpecMagMax').text(u.values[1]);specimenTable.draw();crossFilter();}});
+    $('#labelSpecMagMin').text($('#sliderSpecMag').slider('values')[0]);$('#labelSpecMagMax').text($('#sliderSpecMag').slider('values')[1]);
+    const compVals=magsData.map(d=>d.Completeness);
+    $('#sliderMagComp').slider({range:true,min:Math.min(...compVals),max:Math.max(...compVals),values:[Math.min(...compVals),Math.max(...compVals)],slide:(e,u)=>{$('#labelMagCompMin').text(u.values[0]);$('#labelMagCompMax').text(u.values[1]);magTable.draw();crossFilter();}});
+    $('#labelMagCompMin').text($('#sliderMagComp').slider('values')[0]);$('#labelMagCompMax').text($('#sliderMagComp').slider('values')[1]);
+    const contVals=magsData.map(d=>d.Contamination);
+    $('#sliderMagCont').slider({range:true,min:Math.min(...contVals),max:Math.max(...contVals),values:[Math.min(...contVals),Math.max(...contVals)],slide:(e,u)=>{$('#labelMagContMin').text(u.values[0]);$('#labelMagContMax').text(u.values[1]);magTable.draw();crossFilter();}});
+    $('#labelMagContMin').text($('#sliderMagCont').slider('values')[0]);$('#labelMagContMax').text($('#sliderMagCont').slider('values')[1]);
+    // DataTables searches
+    $.fn.dataTable.ext.search.push((s,d)=>{if(s.nTable.id==='specimenTable'){const [dmin,dmax]=$('#sliderSpecData').slider('values'),v=parseFloat(d[10])||0;if(v<dmin||v>dmax)return!1;const [mmin,mmax]=$('#sliderSpecMag').slider('values'),mv=parseFloat(d[13])||0;if(mv<mmin||mv>mmax)return!1;}if(s.nTable.id==='magTable'){const [cmin,cmax]=$('#sliderMagComp').slider('values'),cv=parseFloat(d[7])||0;if(cv<cmin||cv>cmax)return!1;const [tmin,tmax]=$('#sliderMagCont').slider('values'),tv=parseFloat(d[8])||0;if(tv<tmin||tv>tmax)return!1;}return!0;});
+    $.fn.dataTable.ext.search.push((s,d)=>{if(!activeIDs)return!0;const id=s.nTable.id==='specimenTable'?d[0]:d[1];return activeIDs.includes(id);});
+    // Handlers
+    $('#speciesFilter').on('change',()=>{specimenTable.column(1).search($('#speciesFilter').val()).draw();crossFilter();});
+    $('#biomeFilter').on('change',()=>{specimenTable.column(8).search($('#biomeFilter').val()).draw();crossFilter();});
+    // Init tables
+    specimenTable=$('#specimenTable').DataTable({dom:'Bfrtip',buttons:['csv'],initComplete(){this.api().columns().every(function(i){$('input',this.footer()).on('keyup change clear',()=>{specimenTable.column(i).search($('input',this.footer()).val()).draw();crossFilter();});});}});
+    magTable=$('#magTable').DataTable({dom:'Bfrtip',buttons:['csv'],initComplete(){this.api().columns().every(function(i){$('input',this.footer()).on('keyup change clear',()=>{magTable.column(i).search($('input',this.footer()).val()).draw();crossFilter();});});}});
+    resetFilters();
+  });
+  function crossFilter(){const spec=new Set();specimenTable.rows({filter:'applied'}).every(function(){spec.add(this.data()[0]);});let magF=!1;const mC=$('#sliderMagComp'),mT=$('#sliderMagCont');if($('#sliderSpecData').slider('values')[0]!==$('#sliderSpecData').slider('option','min')||$('#sliderSpecData').slider('values')[1]!==$('#sliderSpecData').slider('option','max'))magF=!0; if($('#sliderSpecMag').slider('values')[0]!==$('#sliderSpecMag').slider('option','min')||$('#sliderSpecMag').slider('values')[1]!==$('#sliderSpecMag').slider('option','max'))magF=!0; if(mC.slider('values')[0]!==mC.slider('option','min')||mC.slider('values')[1]!==mC.slider('option','max'))magF=!0; if(mT.slider('values')[0]!==mT.slider('option','min')||mT.slider('values')[1]!==mT.slider('option','max'))magF=!0; $('#magTable tfoot input').each(function(){if($(this).val())magF=!0;}); if(!magF)activeIDs=Array.from(spec); else{const mset=new Set();magTable.rows({filter:'applied'}).every(function(){mset.add(this.data()[1]);});activeIDs=Array.from(spec).filter(id=>mset.has(id));}specimenTable.draw();magTable.draw();updateMap(activeIDs.length?specimensData.filter(d=>activeIDs.includes(d.specimenID)):[]);}
+  function updateMap(data){const cols={Bear:'#636EFA',Deer:'#EF553B',Fox:'#00CC96',Rabbit:'#AB63FA',Wolf:'#FF669A',Moose:'#FFCC00',Elk:'#33CC33',Bison:'#CC33FF',Lynx:'#33CCCC',Cougar:'#CC6633',Beaver:'#666600',Otter:'#006666'};const trace={type:'scattermapbox',lat:data.map(d=>d.Latitude),lon:data.map(d=>d.Longitude),text:data.map(d=>d.Species),customdata:data.map(d=>d.specimenID),mode:'markers',marker:{size:12,color:data.map(d=>cols[d.Species]||'#AAAAAA')},cluster:{enabled:true,maxzoom:14,step:50}};const layout={mapbox:{style:'open-street-map',center:{lat:39,lon:-98},zoom:3},margin:{t:0,b:0,l:0,r:0},height:600};Plotly.newPlot('map',[trace],layout).then(()=>{const m=document.getElementById('map');m.on('plotly_selected',evt=>{activeIDs=evt.points.length?evt.points.map(pt=>pt.customdata):null;specimenTable.draw();magTable.draw();updateMap(activeIDs?specimensData.filter(d=>activeIDs.includes(d.specimenID)):specimensData);});m.on('plotly_click',evt=>{activeIDs=[evt.points[0].customdata];specimenTable.draw();magTable.draw();updateMap(specimensData.filter(d=>activeIDs.includes(d.specimenID)));});});}
+  function resetFilters(){$('#speciesFilter').val('');$('#biomeFilter').val('');activeIDs=null;specimenTable.search('').columns().search('').draw();magTable.search('').columns().search('').draw();$('#sliderSpecData').slider('values',[$('#sliderSpecData').slider('option','min'),$('#sliderSpecData').slider('option','max')]);$('#labelSpecDataMin').text($('#sliderSpecData').slider('values')[0]);$('#labelSpecDataMax').text($('#sliderSpecData').slider('values')[1]);$('#sliderSpecMag').slider('values',[$('#sliderSpecMag').slider('option','min'),$('#sliderSpecMag').slider('option','max')]);$('#labelSpecMagMin').text($('#sliderSpecMag').slider('values')[0]);$('#labelSpecMagMax').text($('#sliderSpecMag').slider('values')[1]);$('#sliderMagComp').slider('values',[$('#sliderMagComp').slider('option','min'),$('#sliderMagComp').slider('option','max')]);$('#labelMagCompMin').text($('#sliderMagComp').slider('values')[0]);$('#labelMagCompMax').text($('#sliderMagComp').slider('values')[1]);$('#sliderMagCont').slider('values',[$('#sliderMagCont').slider('option','min'),$('#sliderMagCont').slider('option','max')]);$('#labelMagContMin').text($('#sliderMagCont').slider('values')[0]);$('#labelMagContMax').text($('#sliderMagCont').slider('values')[1]);updateMap(specimensData);}
+</script>
+
+</body>
+</html>

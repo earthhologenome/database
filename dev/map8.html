@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Samples Map and Table</title>
+
+    <!-- Plotly -->
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+
+    <!-- jQuery and DataTables -->
+    <script src="https://code.jquery.com/jquery-3.5.1.js"></script>
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.10.21/css/jquery.dataTables.min.css">
+    <script src="https://cdn.datatables.net/1.10.21/js/jquery.dataTables.min.js"></script>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 40px;
+        }
+        #map {
+            height: 600px;
+            margin-bottom: 50px;
+        }
+        #sampleTable {
+            width: 100%;
+        }
+        tfoot input {
+            width: 100%;
+            box-sizing: border-box;
+        }
+        .button-container {
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+
+<h1>Samples Map and Table</h1>
+
+<div id="map"></div>
+
+<div class="button-container">
+    <button onclick="resetFilters()">Reset Filters</button>
+</div>
+
+<table id="sampleTable" class="display">
+    <thead>
+        <tr>
+            <th>SampleID</th>
+            <th>LocationID</th>
+            <th>SampleType</th>
+            <th>Value</th>
+            <th>Species</th>
+            <th>Latitude</th> <!-- hidden -->
+            <th>Longitude</th> <!-- hidden -->
+        </tr>
+    </thead>
+    <tfoot>
+        <tr>
+            <th>SampleID</th>
+            <th>LocationID</th>
+            <th>SampleType</th>
+            <th>Value</th>
+            <th>Species</th>
+            <th>Latitude</th> <!-- hidden -->
+            <th>Longitude</th> <!-- hidden -->
+        </tr>
+    </tfoot>
+    <tbody>
+        <!-- Table rows will be inserted by JavaScript -->
+    </tbody>
+</table>
+
+<script>
+    var tableData = [
+        {SampleID: 'SAMP001', LocationID: 'LOC001', SampleType: 'Water', Value: 7.1, Species: 'Bear', Latitude: 37.7749, Longitude: -122.4194},
+        {SampleID: 'SAMP002', LocationID: 'LOC001', SampleType: 'Soil', Value: 5.5, Species: 'Bear', Latitude: 37.7749, Longitude: -122.4194},
+        {SampleID: 'SAMP003', LocationID: 'LOC002', SampleType: 'Water', Value: 8.3, Species: 'Deer', Latitude: 34.0522, Longitude: -118.2437},
+        {SampleID: 'SAMP004', LocationID: 'LOC003', SampleType: 'Air', Value: 3.2, Species: 'Fox', Latitude: 40.7128, Longitude: -74.0060},
+        {SampleID: 'SAMP005', LocationID: 'LOC003', SampleType: 'Water', Value: 6.8, Species: 'Fox', Latitude: 40.7128, Longitude: -74.0060},
+        {SampleID: 'SAMP006', LocationID: 'LOC004', SampleType: 'Soil', Value: 4.9, Species: 'Rabbit', Latitude: 41.8781, Longitude: -87.6298},
+        {SampleID: 'SAMP007', LocationID: 'LOC005', SampleType: 'Air', Value: 2.5, Species: 'Bear', Latitude: 47.6062, Longitude: -122.3321},
+    ];
+
+    var dataTable;
+    var activeSampleIDs = null;
+    var activeLocationID = null;
+
+    $(document).ready(function() {
+        var tableBody = $('#sampleTable tbody');
+        tableData.forEach(function(row) {
+            tableBody.append(
+                `<tr>
+                    <td>${row.SampleID}</td>
+                    <td>${row.LocationID}</td>
+                    <td>${row.SampleType}</td>
+                    <td>${row.Value}</td>
+                    <td>${row.Species}</td>
+                    <td>${row.Latitude}</td>
+                    <td>${row.Longitude}</td>
+                </tr>`
+            );
+        });
+
+        // Add search boxes for each column
+        $('#sampleTable tfoot th').each(function() {
+            var title = $(this).text();
+            if (title !== "Latitude" && title !== "Longitude") {
+                $(this).html('<input type="text" placeholder="Search ' + title + '" />');
+            } else {
+                $(this).html('');
+            }
+        });
+
+        dataTable = $('#sampleTable').DataTable({
+            initComplete: function() {
+                this.api().columns().every(function() {
+                    var that = this;
+                    $('input', this.footer()).on('keyup change clear', function() {
+                        if (that.search() !== this.value) {
+                            that.search(this.value).draw();
+                        }
+                    });
+                });
+            },
+            columnDefs: [
+                { "targets": [5,6], "visible": false } // Hide lat/lon columns
+            ]
+        });
+
+        // Custom filter for selections
+        $.fn.dataTable.ext.search.push(
+            function(settings, data, dataIndex) {
+                var sampleID = data[0];
+                var locationID = data[1];
+
+                if (activeSampleIDs !== null) {
+                    return activeSampleIDs.includes(sampleID);
+                }
+                if (activeLocationID !== null) {
+                    return locationID === activeLocationID;
+                }
+                return true;
+            }
+        );
+
+        // Update map initially
+        updateMap(tableData);
+
+        // Update map after table filtering
+        dataTable.on('search.dt', function() {
+            var filteredData = [];
+            dataTable.rows({ filter: 'applied' }).every(function(rowIdx) {
+                var data = this.data();
+                filteredData.push({
+                    SampleID: data[0],
+                    LocationID: data[1],
+                    SampleType: data[2],
+                    Value: parseFloat(data[3]),
+                    Species: data[4],
+                    Latitude: parseFloat(data[5]),
+                    Longitude: parseFloat(data[6])
+                });
+            });
+            updateMap(filteredData);
+        });
+    });
+
+    function updateMap(data) {
+        var speciesList = [...new Set(data.map(d => d.Species))];
+        var colors = [
+            '#636EFA', '#EF553B', '#00CC96', '#AB63FA', '#FFA15A', '#19D3F3', '#FF6692', '#B6E880'
+        ];
+
+        var traces = speciesList.map(function(speciesName, index) {
+            var speciesData = data.filter(d => d.Species === speciesName);
+
+            return {
+                type: 'scattermapbox',
+                lat: speciesData.map(d => d.Latitude),
+                lon: speciesData.map(d => d.Longitude),
+                text: speciesData.map(d => d.SampleID),
+                customdata: speciesData.map(d => d.LocationID),
+                name: speciesName,
+                mode: 'markers',
+                marker: { size: 12, color: colors[index % colors.length] }
+            };
+        });
+
+        var mapLayout = {
+            mapbox: {
+                style: 'open-street-map',
+                center: { lat: 39, lon: -98 },
+                zoom: 3
+            },
+            margin: { t:0, b:0, l:0, r:0 },
+            height: 600
+        };
+
+        Plotly.newPlot('map', traces, mapLayout).then(function(plot) {
+            var mapDiv = document.getElementById('map');
+
+            // Drag-select
+            mapDiv.on('plotly_selected', function(eventData) {
+                if (eventData && eventData.points.length > 0) {
+                    activeSampleIDs = eventData.points.map(function(pt) { return pt.text; });
+                    activeLocationID = null;
+                } else {
+                    activeSampleIDs = null;
+                    activeLocationID = null;
+                }
+                dataTable.draw();
+            });
+
+            // Click
+            mapDiv.on('plotly_click', function(eventData) {
+                if (eventData && eventData.points.length > 0) {
+                    activeLocationID = eventData.points[0].customdata;
+                    activeSampleIDs = null;
+                    dataTable.draw();
+                }
+            });
+        });
+    }
+
+    function resetFilters() {
+        activeSampleIDs = null;
+        activeLocationID = null;
+        dataTable.search('').columns().search('').draw();
+        updateMap(tableData);
+    }
+</script>
+
+</body>
+</html>

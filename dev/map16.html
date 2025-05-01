@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Fully Synchronized Cross-Filtered Map and Tables with Species Dropdown</title>
+
+  <!-- Plotly -->
+  <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+
+  <!-- jQuery and DataTables -->
+  <script src="https://code.jquery.com/jquery-3.5.1.js"></script>
+  <link rel="stylesheet" href="https://cdn.datatables.net/1.10.21/css/jquery.dataTables.min.css">
+  <script src="https://cdn.datatables.net/1.10.21/js/jquery.dataTables.min.js"></script>
+
+  <style>
+    body { font-family: Arial, sans-serif; margin: 40px; }
+    #map { height: 600px; margin-bottom: 20px; }
+    .filter-container { margin-bottom: 20px; }
+    .button-container { margin-bottom: 20px; }
+    table.dataTable tfoot input { width: 100%; box-sizing: border-box; }
+    /* Hide the hidden ID column */
+    th.hidden, td.hidden { display: none; }
+  </style>
+</head>
+<body>
+
+<h1>Fully Synchronized Cross-Filtered Map and Tables with Species Dropdown</h1>
+
+<div id="map"></div>
+
+<div class="filter-container">
+  <label for="speciesFilter">Filter by Species: </label>
+  <select id="speciesFilter">
+    <option value="">All Species</option>
+  </select>
+</div>
+
+<div class="button-container">
+  <button onclick="resetFilters()">Reset Filters</button>
+</div>
+
+<h2>Specimen Table</h2>
+<table id="specimenTable" class="display">
+  <thead>
+    <tr>
+      <th class="hidden">LocationID</th>
+      <th>Species</th>
+      <th>Family</th>
+      <th>Order</th>
+      <th>Country</th>
+      <th>Sample Type</th>
+      <th>Total Data</th>
+    </tr>
+  </thead>
+  <tfoot>
+    <tr>
+      <th class="hidden">LocationID</th>
+      <th>Species</th>
+      <th>Family</th>
+      <th>Order</th>
+      <th>Country</th>
+      <th>Sample Type</th>
+      <th>Total Data</th>
+    </tr>
+  </tfoot>
+  <tbody></tbody>
+</table>
+
+<h2>Samples Table</h2>
+<table id="sampleTable" class="display">
+  <thead>
+    <tr>
+      <th>SampleID</th>
+      <th>LocationID</th>
+      <th>SampleType</th>
+      <th>Value</th>
+    </tr>
+  </thead>
+  <tfoot>
+    <tr>
+      <th>SampleID</th>
+      <th>LocationID</th>
+      <th>SampleType</th>
+      <th>Value</th>
+    </tr>
+  </tfoot>
+  <tbody></tbody>
+</table>
+
+<script>
+  var specimensData = [
+    { LocationID: 'LOC001', Species: 'Bear',   Family: 'Ursidae',   Order: 'Carnivora',   Country: 'USA', SampleType: 'Tissue', TotalData: 120, Latitude: 37.7749, Longitude: -122.4194 },
+    { LocationID: 'LOC002', Species: 'Deer',   Family: 'Cervidae',  Order: 'Artiodactyla',Country: 'USA', SampleType: 'Blood',  TotalData: 85,  Latitude: 34.0522, Longitude: -118.2437 },
+    { LocationID: 'LOC003', Species: 'Fox',    Family: 'Canidae',   Order: 'Carnivora',   Country: 'USA', SampleType: 'Fur',    TotalData: 60,   Latitude: 40.7128, Longitude: -74.0060 },
+    { LocationID: 'LOC004', Species: 'Rabbit', Family: 'Leporidae', Order: 'Lagomorpha', Country: 'USA', SampleType: 'Tissue', TotalData: 45,  Latitude: 41.8781, Longitude: -87.6298 }
+    // ...more specimens
+  ];
+
+  var samplesData = [
+    { SampleID: 'SAMP001', LocationID: 'LOC001', SampleType: 'Water', Value: 7.1 },
+    { SampleID: 'SAMP002', LocationID: 'LOC001', SampleType: 'Soil',  Value: 5.5 },
+    { SampleID: 'SAMP003', LocationID: 'LOC002', SampleType: 'Water', Value: 8.3 },
+    { SampleID: 'SAMP004', LocationID: 'LOC003', SampleType: 'Air',   Value: 3.2 },
+    { SampleID: 'SAMP005', LocationID: 'LOC003', SampleType: 'Water', Value: 6.8 },
+    { SampleID: 'SAMP006', LocationID: 'LOC004', SampleType: 'Soil',  Value: 4.9 }
+  ];
+
+  var specimenTable, sampleTable;
+  var activeLocationIDs = null;
+
+  $(document).ready(function() {
+    // Populate specimen table
+    specimensData.forEach(row => {
+      $('#specimenTable tbody').append(
+        `<tr>
+          <td class="hidden">${row.LocationID}</td>
+          <td>${row.Species}</td>
+          <td>${row.Family}</td>
+          <td>${row.Order}</td>
+          <td>${row.Country}</td>
+          <td>${row.SampleType}</td>
+          <td>${row.TotalData}</td>
+        </tr>`
+      );
+    });
+
+    // Populate samples table
+    samplesData.forEach(row => {
+      $('#sampleTable tbody').append(
+        `<tr>
+          <td>${row.SampleID}</td>
+          <td>${row.LocationID}</td>
+          <td>${row.SampleType}</td>
+          <td>${row.Value}</td>
+        </tr>`
+      );
+    });
+
+    // Add search inputs
+    $('#specimenTable tfoot th').each(function() {
+      var title = $(this).text();
+      $(this).
+        html(title === 'LocationID' ? '' : '<input type="text" placeholder="Search '+title+'" />');
+    });
+    $('#sampleTable tfoot th').each(function() {
+      var title = $(this).text();
+      $(this).html('<input type="text" placeholder="Search '+title+'" />');
+    });
+
+    // Initialize DataTables
+    specimenTable = $('#specimenTable').DataTable({
+      initComplete: function() {
+        this.api().columns().every(function(idx) {
+          var column = this;
+          $('input', this.footer()).on('keyup change clear', function() {
+            column.search(this.value).draw(); crossFilter();
+          });
+        });
+      }
+    });
+
+    sampleTable = $('#sampleTable').DataTable({
+      initComplete: function() {
+        this.api().columns().every(function() {
+          var column = this;
+          $('input', this.footer()).on('keyup change clear', function() {
+            column.search(this.value).draw(); crossFilter();
+          });
+        });
+      }
+    });
+
+    // Populate species dropdown
+    var speciesSet = new Set(specimensData.map(d => d.Species));
+    speciesSet.forEach(s => $('#speciesFilter').append(`<option value="${s}">${s}</option>`));
+    $('#speciesFilter').on('change', function() {
+      specimenTable.column(1).search(this.value).draw(); crossFilter();
+    });
+
+    // Cross-filter extension
+    $.fn.dataTable.ext.search.push(function(settings, data) {
+      if (!activeLocationIDs) return true;
+      if (settings.nTable.id === 'specimenTable') {
+        return activeLocationIDs.includes(data[0]);
+      }
+      if (settings.nTable.id === 'sampleTable') {
+        return activeLocationIDs.includes(data[1]);
+      }
+      return true;
+    });
+
+    updateMap(specimensData);
+  });
+
+  function crossFilter() {
+    var locs = new Set();
+    specimenTable.rows({ filter: 'applied' }).every(function() { locs.add(this.data()[0]); });
+    var sampLocs = new Set();
+    sampleTable.rows({ filter: 'applied' }).every(function() { sampLocs.add(this.data()[1]); });
+    activeLocationIDs = [...locs].filter(id => sampLocs.has(id));
+    specimenTable.draw(); sampleTable.draw();
+    var filtered = specimensData.filter(d => activeLocationIDs.includes(d.LocationID));
+    updateMap(filtered);
+  }
+
+  function updateMap(data) {
+    var colors = { 'Bear':'#636EFA','Deer':'#EF553B','Fox':'#00CC96','Rabbit':'#AB63FA' };
+    var trace = {
+      type:'scattermapbox',
+      lat: data.map(d=>d.Latitude),
+      lon: data.map(d=>d.Longitude),
+      text: data.map(d=>d.Species),
+      customdata: data.map(d=>d.LocationID),
+      mode:'markers', marker:{ size:12, color:data.map(d=>colors[d.Species]||'#AAAAAA')},
+      cluster:{ enabled:true, maxzoom:14, step:50 }
+    };
+    var layout = { mapbox:{ style:'open-street-map', center:{lat:39,lon:-98}, zoom:3 }, margin:{t:0,b:0,l:0,r:0}, height:600 };
+    Plotly.newPlot('map',[trace],layout).then(plot => {
+      var mapDiv=document.getElementById('map');
+      mapDiv.on('plotly_selected', e=>{
+        activeLocationIDs = e&&e.points.length? e.points.map(pt=>pt.customdata): null;
+        specimenTable.draw(); sampleTable.draw();
+        updateMap(activeLocationIDs? specimensData.filter(d=>activeLocationIDs.includes(d.LocationID)): specimensData);
+      });
+      mapDiv.on('plotly_click', e=>{
+        activeLocationIDs = e&&e.points.length? [e.points[0].customdata]: null;
+        specimenTable.draw(); sampleTable.draw();
+        updateMap(activeLocationIDs? specimensData.filter(d=>activeLocationIDs.includes(d.LocationID)): specimensData);
+      });
+    });
+  }
+
+  function resetFilters() {
+    $('#speciesFilter').val(''); activeLocationIDs=null;
+    specimenTable.search('').columns().search('').draw();
+    sampleTable.search('').columns().search('').draw();
+    updateMap(specimensData);
+  }
+</script>
+
+</body>
+</html>

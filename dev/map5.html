@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Samples Map and Table</title>
+
+    <!-- Plotly -->
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+
+    <!-- jQuery and DataTables -->
+    <script src="https://code.jquery.com/jquery-3.5.1.js"></script>
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.10.21/css/jquery.dataTables.min.css">
+    <script src="https://cdn.datatables.net/1.10.21/js/jquery.dataTables.min.js"></script>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 40px;
+        }
+        #map {
+            height: 600px;
+        }
+        #sampleTable {
+            margin-top: 50px;
+            width: 100%;
+        }
+    </style>
+</head>
+<body>
+
+<h1>Samples Map</h1>
+<div id="map"></div>
+
+<h2>Samples Table</h2>
+<table id="sampleTable" class="display">
+    <thead>
+        <tr>
+            <th>SampleID</th>
+            <th>LocationID</th>
+            <th>SampleType</th>
+            <th>Value</th>
+            <th>Latitude</th>    <!-- hidden -->
+            <th>Longitude</th>   <!-- hidden -->
+        </tr>
+    </thead>
+    <tbody>
+        <!-- rows inserted here -->
+    </tbody>
+</table>
+
+<script>
+    // Sample data
+    var tableData = [
+        {SampleID: 'SAMP001', LocationID: 'LOC001', SampleType: 'Water', Value: 7.1, Latitude: 37.7749, Longitude: -122.4194, Species: 'Bear'},
+        {SampleID: 'SAMP002', LocationID: 'LOC001', SampleType: 'Soil', Value: 5.5, Latitude: 37.7749, Longitude: -122.4194, Species: 'Bear'},
+        {SampleID: 'SAMP003', LocationID: 'LOC002', SampleType: 'Water', Value: 8.3, Latitude: 34.0522, Longitude: -118.2437, Species: 'Deer'},
+        {SampleID: 'SAMP004', LocationID: 'LOC003', SampleType: 'Air', Value: 3.2, Latitude: 40.7128, Longitude: -74.0060, Species: 'Fox'},
+        {SampleID: 'SAMP005', LocationID: 'LOC003', SampleType: 'Water', Value: 6.8, Latitude: 40.7128, Longitude: -74.0060, Species: 'Fox'},
+        {SampleID: 'SAMP006', LocationID: 'LOC004', SampleType: 'Soil', Value: 4.9, Latitude: 41.8781, Longitude: -87.6298, Species: 'Rabbit'},
+        {SampleID: 'SAMP007', LocationID: 'LOC005', SampleType: 'Air', Value: 2.5, Latitude: 47.6062, Longitude: -122.3321, Species: 'Bear'},
+    ];
+
+    var dataTable;  // Global reference to the DataTable
+
+    $(document).ready(function() {
+        var tableBody = $('#sampleTable tbody');
+        tableData.forEach(function(row) {
+            tableBody.append(
+                `<tr>
+                    <td>${row.SampleID}</td>
+                    <td>${row.LocationID}</td>
+                    <td>${row.SampleType}</td>
+                    <td>${row.Value}</td>
+                    <td>${row.Latitude}</td>
+                    <td>${row.Longitude}</td>
+                </tr>`
+            );
+        });
+
+        dataTable = $('#sampleTable').DataTable({
+            columnDefs: [
+                { "targets": [4,5], "visible": false }, // Hide lat/lon columns
+            ]
+        });
+
+        // Initial map draw
+        updateMap(tableData);
+
+        // When table is filtered, update map
+        dataTable.on('search.dt', function() {
+            var filteredData = [];
+            dataTable.rows({ filter: 'applied' }).every(function(rowIdx) {
+                var data = this.data();
+                filteredData.push({
+                    SampleID: data[0],
+                    LocationID: data[1],
+                    SampleType: data[2],
+                    Value: parseFloat(data[3]),
+                    Latitude: parseFloat(data[4]),
+                    Longitude: parseFloat(data[5]),
+                });
+            });
+            updateMap(filteredData);
+        });
+    });
+
+    function updateMap(data) {
+        // First, get unique species
+        var speciesList = [...new Set(data.map(d => d.Species))];
+
+        var traces = speciesList.map(function(speciesName) {
+            var speciesData = data.filter(d => d.Species === speciesName);
+
+            return {
+                type: 'scattermapbox',
+                lat: speciesData.map(d => d.Latitude),
+                lon: speciesData.map(d => d.Longitude),
+                text: speciesData.map(d => d.SampleID),
+                name: speciesName, // Use species as the trace name
+                mode: 'markers',
+                marker: { size: 12 }
+            };
+        });
+
+        var mapLayout = {
+            mapbox: {
+                style: 'open-street-map',
+                center: { lat: 39, lon: -98 },
+                zoom: 3
+            },
+            margin: { t:0, b:0, l:0, r:0 },
+            height: 600
+        };
+
+        Plotly.newPlot('map', traces, mapLayout).then(function(plot) {
+            var mapDiv = document.getElementById('map');
+            mapDiv.on('plotly_selected', function(eventData) {
+                if (eventData && eventData.points.length > 0) {
+                    var selectedSampleIDs = eventData.points.map(function(pt) {
+                        return pt.text;
+                    });
+
+                    dataTable.rows().every(function(rowIdx, tableLoop, rowLoop) {
+                        var rowData = this.data();
+                        var sampleID = rowData[0];
+                        if (selectedSampleIDs.includes(sampleID)) {
+                            $(this.node()).show();
+                        } else {
+                            $(this.node()).hide();
+                        }
+                    });
+                } else {
+                    dataTable.rows().every(function() {
+                        $(this.node()).show();
+                    });
+                }
+            });
+        });
+    }
+</script>
+
+</body>
+</html>

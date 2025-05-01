@@ -1,0 +1,668 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Earth Hologenome Initiative database</title>
+
+  <!-- Plotly -->
+  <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+
+  <!-- jQuery, jQuery UI, and DataTables -->
+  <script src="https://code.jquery.com/jquery-3.5.1.js"></script>
+  <link rel="stylesheet" href="https://code.jquery.com/ui/1.12.1/themes/base/jquery-ui.css">
+  <link rel="stylesheet" href="https://cdn.datatables.net/1.10.21/css/jquery.dataTables.min.css">
+
+  <!-- DataTables Buttons CSS -->
+  <link rel="stylesheet" href="https://cdn.datatables.net/buttons/1.6.2/css/buttons.dataTables.min.css">
+
+  <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.min.js"></script>
+  <script src="https://cdn.datatables.net/1.10.21/js/jquery.dataTables.min.js"></script>
+
+  <!-- DataTables Buttons and CSV export JS -->
+  <script src="https://cdn.datatables.net/buttons/1.6.2/js/dataTables.buttons.min.js"></script>
+  <script src="https://cdn.datatables.net/buttons/1.6.2/js/buttons.html5.min.js"></script>
+
+  <script src="data3.js"></script>
+
+  <style>
+    body { font-family: Arial, sans-serif; margin: 40px; }
+    /* full-screen loader */
+    #loader {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      display: flex;
+      flex-direction: column;      /* ← add this */
+      align-items: center;
+      justify-content: center;
+      gap: 0.5em;                  /* ← optional, gives space between logo & text */
+      background: white;
+      font-size: 1.5em;
+      z-index: 9999;
+    }
+    /* hide the app until ready */
+    #app {
+      display: none;
+    }
+    #map { height: 600px; width: 100%; margin-bottom: 20px; }
+    #specimenTable_wrapper,
+    #specimenTable,
+    #magTable_wrapper,
+    #magTable {
+      table-layout: auto;
+      width: 100% !important;
+      box-sizing: border-box;
+    }
+    #specimenTable_wrapper .dt-buttons,
+    #magTable_wrapper   .dt-buttons {
+      float: right;
+      margin-bottom: 10px; /* give a little breathing room */
+    }
+    .filter-container {
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      gap: 1rem;               /* space between the columns */
+      width: 100%;             /* so it fills the available space in the flex row */
+    }
+    .button-container { margin-bottom: 20px; }
+    table.dataTable tfoot div.slider { margin: 5px 0; }
+    table.dataTable tfoot .slider-labels { font-size: 0.9em; margin-bottom: 8px; }
+    table.dataTable tfoot .slider-labels span { margin: 0 4px; }
+    th.hidden, td.hidden { display: none; }
+    .sample-tag { display: inline-block; padding: 2px 6px; margin-right: 4px; border-radius: 4px; color: #fff; font-size: 0.9em; }
+    .taxonomy-tag { display: inline-block; padding: 2px 6px; margin-right: 4px; border-radius: 4px; color: #fff; font-size: 0.9em; }
+    /* ————————————————————————————
+   Dropdowns
+   ———————————————————————————— */
+    .filter-container select {
+      appearance: none;            /* remove default arrow */
+      -webkit-appearance: none;
+      -moz-appearance: none;
+      background-color: #fff;
+      border: 1px solid #ccc;
+      margin-right:20px;
+      padding: 0.5em 1.5em 0.5em 0.75em;  /* leaves room for custom arrow */
+      border-radius: 0.375rem;     /* 6px */
+      font-size: 1rem;             /* 16px */
+      line-height: 1.5;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+      background-image: url("data:image/svg+xml;charset=US-ASCII,\
+        %3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E\
+        %3Cpath fill='%23666' d='M0 0l5 6 5-6z'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 0.75em center;
+      background-size: 0.65em auto;
+      transition: border-color 0.2s, box-shadow 0.2s;
+      cursor: pointer;
+    }
+
+    .filter-container select:focus {
+      border-color: #80bdff;
+      box-shadow: 0 0 0 3px rgba(0,123,255,0.25);
+      outline: none;
+    }
+
+    #dataFilterCheckbox,
+    #releaseFilterCheckbox {
+       /* scale the native checkbox up */
+       transform: scale(2);
+       transform-origin: top left;
+       /* line it up vertically with the dropdowns */
+       margin-top: 0.3rem;
+       vertical-align: middle;
+     }
+
+    /* ————————————————————————————
+       Reset Button
+       ———————————————————————————— */
+
+       .filter-button-row {
+          display: flex;
+          align-items: center;               /* vertically center them */
+          justify-content: space-between;    /* filters on left, button on right */
+          margin-bottom: 0px;               /* same spacing you had before */
+        }
+
+        /* remove the extra bottom margin on the old container if you like */
+        .button-container {
+          margin-bottom: 0;
+        }
+
+    .button-container button {
+      display: inline-block;
+      padding: 1em 1.75em;
+      border: none;
+      border-radius: 0.375rem;      /* 6px */
+      font-size: 1rem;
+      font-weight: 500;
+      color: #fff;
+      background-color: #007bff;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.12);
+      transition: background-color 0.2s, transform 0.1s, box-shadow 0.2s;
+      cursor: pointer;
+    }
+
+    .button-container button:hover {
+      background-color: #0069d9;
+    }
+
+    .button-container button:active {
+      transform: translateY(1px);
+      box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+    }
+
+    .button-container button:focus {
+      outline: none;
+      box-shadow: 0 0 0 3px rgba(0,123,255,0.5);
+    }
+  </style>
+</head>
+<body>
+  <!-- loader -->
+  <div id="loader" style="text-align: center; padding: 20px;">
+  <img
+    id="loader-logo"
+    src="logo_draft.png"
+    alt="Loading Logo"
+    style="display: block; margin: 0 auto 10px; max-width: 600px;"
+  />
+  The database (about 10 MB) is loading, please wait…
+</div>
+  <div id="app">
+
+    <h1>Earth Hologenome Initiative Database</h1>
+
+    <div id="map"></div>
+
+    <div class="filter-button-row">
+      <div class="filter-container">
+        <div>
+          <label for="speciesFilter">Filter by Species: </label></br>
+          <select id="speciesFilter"><option value="">All Species</option></select>
+        </div>
+        <div>
+          <label for="biomeFilter">Filter by Biome: </label></br>
+          <select id="biomeFilter"><option value="">All Biomes</option></select>
+        </div>
+        <div>
+          <label for="sampleTypeFilter">Filter by Sample Type: </label></br>
+          <select id="sampleTypeFilter"><option value="">All Sample Types</option></select>
+        </div>
+        <div>
+          <label for="dataFilterCheckbox">Data generated:</label><br>
+          <input type="checkbox" id="dataFilterCheckbox">
+        </div>
+        <div>
+          <label for="releaseFilterCheckbox">Data released:</label><br>
+          <input type="checkbox" id="releaseFilterCheckbox">
+        </div>
+        <div class="button-container">
+          <button onclick="resetFilters()">Reset Filters</button>
+        </div>
+      </div>
+    </div>
+
+    <h2>Specimen Table</h2>
+    <table id="specimenTable" class="display">
+      <thead>
+        <tr>
+          <th class="hidden">specimenID</th>
+          <th>Species</th>
+          <th class="hidden">Family</th>
+          <th>Order</th>
+          <th>Class</th>
+          <th class="hidden">Length</th>
+          <th class="hidden">Weight</th>
+          <th>Country</th>
+          <th>Biome</th>
+          <th>Sample Type</th>
+          <th>Total Data</th>
+          <th class="hidden">Host Data</th>
+          <th class="hidden">Metagenomic Data</th>
+          <th class="hidden">Release</th>
+          <th>MAG Count</th>
+        </tr>
+      </thead>
+      <tfoot>
+        <tr>
+          <th class="hidden"></th>
+          <th>Species</th>
+          <th class="hidden"></th>
+          <th>Order</th>
+          <th>Class</th>
+          <th class="hidden"></th>
+          <th class="hidden"></th>
+          <th>Country</th>
+          <th>Biome</th>
+          <th>Sample Type</th>
+          <th><div class="slider-labels"><span id="labelSpecDataMin"></span>–<span id="labelSpecDataMax"></span></div><div id="sliderSpecData" class="slider"></div></th>
+          <th class="hidden"></th>
+          <th class="hidden"></th>
+          <th class="hidden"></th>
+          <th><div class="slider-labels"><span id="labelSpecMagMin"></span>–<span id="labelSpecMagMax"></span></div><div id="sliderSpecMag" class="slider"></div></th>
+        </tr>
+      </tfoot>
+      <tbody></tbody>
+    </table>
+
+    <h2>MAG Table</h2>
+    <table id="magTable" class="display">
+      <thead>
+        <tr>
+          <th>MAGID</th><th class="hidden">specimenID</th><th>Species</th><th>Family</th><th>Order</th><th>Class</th><th>Phylum</th><th>Completeness</th><th>Contamination</th><th>Link</th>
+        </tr>
+      </thead>
+      <tfoot>
+        <tr>
+          <th>MAGID</th><th class="hidden"></th><th>Species</th><th>Family</th><th>Order</th><th>Class</th><th>Phylum</th>
+          <th><div class="slider-labels"><span id="labelMagCompMin"></span>–<span id="labelMagCompMax"></span></div><div id="sliderMagComp" class="slider"></div></th>
+          <th><div class="slider-labels"><span id="labelMagContMin"></span>–<span id="labelMagContMax"></span></div><div id="sliderMagCont" class="slider"></div></th>
+          <th>Link</th>
+        </tr>
+      </tfoot>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <script>
+     document.addEventListener('DOMContentLoaded', function() {
+       var loader = document.getElementById('loader');
+       var app    = document.getElementById('app');
+       var checkInterval = setInterval(function() {
+         if (typeof specimensData !== 'undefined' && typeof magsData !== 'undefined') {
+           clearInterval(checkInterval);
+           loader.style.display = 'none';
+           app.style.display    = 'block';
+         }
+         Plotly.Plots.resize(document.getElementById('map'));
+       }, 100);
+     });
+   </script>
+
+
+<script>
+
+  const typeSet = new Set();
+  specimensData.forEach(d => {
+    // If SampleType is an array, iterate; otherwise treat it as a single value
+    if (Array.isArray(d.SampleType)) {
+      d.SampleType.forEach(t => typeSet.add(t));
+    } else {
+      typeSet.add(d.SampleType);
+    }
+  });
+  const typeList = Array.from(typeSet);
+  const typeColors = {};
+  typeList.forEach((type, i) => {
+    const hue = (i * 360 / typeList.length) % 360;
+    typeColors[type] = hslToHex(hue, 0.65, 0.50);
+  });
+
+  const classColors = {
+    Mammalia: '#ad7ebf', // Purple
+    Aves:      '#e74c3c',  // Red
+    Reptilia:  '#2ecc71', // Green
+    Amphibia:  '#3498db' // Blue
+  };
+
+  // converts a hex string like "#3498db" into an {h,s,l} object
+  function hexToHSL(H) {
+    let r = 0, g =  0, b = 0;
+    if (H.length === 4) {
+      r = "0x" + H[1] + H[1];
+      g = "0x" + H[2] + H[2];
+      b = "0x" + H[3] + H[3];
+    } else if (H.length === 7) {
+      r = "0x" + H[1] + H[2];
+      g = "0x" + H[3] + H[4];
+      b = "0x" + H[5] + H[6];
+    }
+    r /= 255; g /= 255; b /= 255;
+    const cmin = Math.min(r, g, b),
+          cmax = Math.max(r, g, b),
+          delta = cmax - cmin;
+    let h = 0;
+    if (delta === 0) {
+      h = 0;
+    } else if (cmax === r) {
+      h = ((g - b) / delta) % 6;
+    } else if (cmax === g) {
+      h = (b - r) / delta + 2;
+    } else {
+      h = (r - g) / delta + 4;
+    }
+    h = Math.round(h * 60);
+    if (h < 0) h += 360;
+    const l = (cmax + cmin) / 2;
+    const s = delta === 0 ? 0 : delta / (1 - Math.abs(2*l - 1));
+    return { h, s, l };
+  }
+
+  const classHues = {};
+  Object.entries(classColors).forEach(([cls, hex]) => {
+    classHues[cls] = hexToHSL(hex).h;
+  });
+
+
+  // group Orders by Class
+  const ordersByClass = {};
+  specimensData.forEach(d => {
+    (ordersByClass[d.Class] ||= new Set()).add(d.Order);
+  });
+
+  // helper: HSL → hex
+  function hslToHex(h,s,l) {
+    const a = s * Math.min(l, 1 - l);
+    const f = n => {
+      const k = (n + h/30) % 12;
+      const color = l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1);
+      return Math.round(255 * color).toString(16).padStart(2, '0');
+    };
+    return `#${f(0)}${f(8)}${f(4)}`;
+  }
+
+  const classSpecies = {};
+  specimensData.forEach(d => {
+    (classSpecies[d.Class] ||= new Set()).add(d.Species);
+  });
+
+  // ── 3) fan out each species’ hue ±15° around its class hue
+  const speciesColors = {};
+  const hueArc = 30;  // total angular span
+
+  Object.entries(classSpecies).forEach(([cls, speciesSet]) => {
+    const list = Array.from(speciesSet);
+    const base = classHues[cls];
+    const N = list.length;
+    list.forEach((sp, i) => {
+      const offset = N === 1
+        ? 0
+        : ((i/(N-1) - 0.5) * hueArc);
+      const h = (base + offset + 360) % 360;
+      speciesColors[sp] = hslToHex(h, 0.65, 0.50);
+    });
+  });
+
+  const linked=specimensData.slice(0,10);
+  let specimenTable,magTable,activeIDs=null;
+  $(function(){
+    const $specBody=$('#specimenTable tbody'),$magBody=$('#magTable tbody');
+    specimensData.forEach(r=>{
+      const classTag=`<span class="sample-tag taxonomy-tag" style="background-color:${classColors[r.Class]}">${r.Class}</span>`;
+      const tags=r.SampleType.map(t=>`<span class="sample-tag" style="background-color:${typeColors[t]}">${t}</span>`).join(' ');
+      const count=magsData.filter(m=>m.specimenID===r.specimenID).length;
+      $specBody.append(`<tr><td class="hidden">${r.specimenID}</td><td>${r.Species}</td><td class="hidden">${r.Family}</td><td>${r.Order}</td><td>${classTag}</td><td class="hidden">${r.Length}</td><td class="hidden">${r.Weight}</td><td>${r.Country}</td><td>${r.Biome}</td><td>${tags}</td><td>${r.TotalData}</td><td class="hidden">${r.HostData}</td><td class="hidden">${r.MetagenomicData}</td><td class="hidden">${r.Release}</td><td>${count}</td></tr>`);
+    });
+    magsData.forEach(r => {
+      const rawLink = r.Link && r.Link !== 'NA' ? r.Link : '';
+      const displayLink = rawLink
+        ? `<a href="${rawLink}" target="_blank" rel="noopener">Download FASTA</a>`
+        : 'Not released';
+
+      $magBody.append(`
+        <tr>
+          <td>${r.MAGID}</td>
+          <td class="hidden">${r.specimenID}</td>
+          <td>${r.Species}</td>
+          <td>${r.Family}</td>
+          <td>${r.Order}</td>
+          <td>${r.Class}</td>
+          <td>${r.Phylum}</td>
+          <td>${r.Completeness}</td>
+          <td>${r.Contamination}</td>
+          <td
+            data-order="${rawLink}"
+            data-search="${rawLink}"
+          >${displayLink}</td>
+        </tr>
+      `);
+    });
+    // Populate dropdowns
+    new Set(specimensData.map(d=>d.Species)).forEach(s=>$('#speciesFilter').append(`<option value="${s}">${s}</option>`));
+    new Set(specimensData.map(d=>d.Biome)).forEach(b=>$('#biomeFilter').append(`<option value="${b}">${b}</option>`));
+    const sampleTypeSet = new Set();
+    specimensData.forEach(r => r.SampleType.forEach(t => sampleTypeSet.add(t)));
+    sampleTypeSet.forEach(t =>
+      $('#sampleTypeFilter').append(`<option value="${t}">${t}</option>`)
+    );
+
+    // Footer filters
+    $('#specimenTable tfoot th').each(function(){
+      const $th = $(this);
+      // skip any column marked hidden, or any footer-cell that contains a slider
+      if ($th.hasClass('hidden') || $th.find('.slider').length) return;
+      // otherwise inject a search box
+      const title = $th.text().trim();
+      $th.html(`<input type="text" placeholder="Filter ${title}"/>`);
+    });
+
+    $('#magTable tfoot th').each(function(){
+      const $th = $(this);
+      if ($th.hasClass('hidden') || $th.find('.slider').length) return;
+      const title = $th.text().trim();
+      $th.html(`<input type="text" placeholder="Filter ${title}"/>`);
+    });
+    // Sliders
+    const tdVals=specimensData.map(d=>d.TotalData);
+    $('#sliderSpecData').slider({range:true,min:Math.min(...tdVals),max:Math.max(...tdVals),values:[Math.min(...tdVals),Math.max(...tdVals)],slide:(e,u)=>{$('#labelSpecDataMin').text(u.values[0]);$('#labelSpecDataMax').text(u.values[1]);specimenTable.draw();crossFilter();}});
+    $('#labelSpecDataMin').text($('#sliderSpecData').slider('values')[0]);$('#labelSpecDataMax').text($('#sliderSpecData').slider('values')[1]);
+    const mcVals=specimensData.map(r=>magsData.filter(m=>m.specimenID===r.specimenID).length);
+    $('#sliderSpecMag').slider({range:true,min:Math.min(...mcVals),max:Math.max(...mcVals),values:[Math.min(...mcVals),Math.max(...mcVals)],slide:(e,u)=>{$('#labelSpecMagMin').text(u.values[0]);$('#labelSpecMagMax').text(u.values[1]);specimenTable.draw();crossFilter();}});
+    $('#labelSpecMagMin').text($('#sliderSpecMag').slider('values')[0]);$('#labelSpecMagMax').text($('#sliderSpecMag').slider('values')[1]);
+    const compVals=magsData.map(d=>d.Completeness);
+    $('#sliderMagComp').slider({range:true,min:Math.min(...compVals),max:Math.max(...compVals),values:[Math.min(...compVals),Math.max(...compVals)],slide:(e,u)=>{$('#labelMagCompMin').text(u.values[0]);$('#labelMagCompMax').text(u.values[1]);magTable.draw();crossFilter();}});
+    $('#labelMagCompMin').text($('#sliderMagComp').slider('values')[0]);$('#labelMagCompMax').text($('#sliderMagComp').slider('values')[1]);
+    const contVals=magsData.map(d=>d.Contamination);
+    $('#sliderMagCont').slider({range:true,min:Math.min(...contVals),max:Math.max(...contVals),values:[Math.min(...contVals),Math.max(...contVals)],slide:(e,u)=>{$('#labelMagContMin').text(u.values[0]);$('#labelMagContMax').text(u.values[1]);magTable.draw();crossFilter();}});
+    $('#labelMagContMin').text($('#sliderMagCont').slider('values')[0]);$('#labelMagContMax').text($('#sliderMagCont').slider('values')[1]);
+    // DataTables searches
+    $.fn.dataTable.ext.search.push((s,d)=>{if(s.nTable.id==='specimenTable'){const [dmin,dmax]=$('#sliderSpecData').slider('values'),v=parseFloat(d[10])||0;if(v<dmin||v>dmax)return!1;const [mmin,mmax]=$('#sliderSpecMag').slider('values'),mv=parseFloat(d[14])||0;if(mv<mmin||mv>mmax)return!1;}if(s.nTable.id==='magTable'){const [cmin,cmax]=$('#sliderMagComp').slider('values'),cv=parseFloat(d[7])||0;if(cv<cmin||cv>cmax)return!1;const [tmin,tmax]=$('#sliderMagCont').slider('values'),tv=parseFloat(d[8])||0;if(tv<tmin||tv>tmax)return!1;}return!0;});
+    $.fn.dataTable.ext.search.push((settings,data)=>{
+      if (settings.nTable.id === 'specimenTable'
+          && $('#dataFilterCheckbox').prop('checked')) {
+            const total = parseFloat(data[10]) || 0;
+            if (total <= 0) return false;
+      }
+      return true;
+    });
+    $.fn.dataTable.ext.search.push((settings,data)=>{
+      if (settings.nTable.id === 'specimenTable'
+          && $('#releaseFilterCheckbox').prop('checked')) {
+        if (!data[13] || data[13].trim() === '') {
+          return false;
+        }
+      }
+      return true;
+    });
+    $.fn.dataTable.ext.search.push((s,d)=>{if(!activeIDs)return!0;const id=s.nTable.id==='specimenTable'?d[0]:d[1];return activeIDs.includes(id);});
+
+    // Handlers
+    $('#speciesFilter').on('change',()=>{specimenTable.column(1).search($('#speciesFilter').val()).draw();crossFilter();});
+    $('#biomeFilter').on('change',()=>{specimenTable.column(8).search($('#biomeFilter').val()).draw();crossFilter();});
+    $('#sampleTypeFilter').on('change', () => {
+      specimenTable
+        .column(9)                          // zero-based index of “Sample Type”
+        .search($('#sampleTypeFilter').val())
+        .draw();
+      crossFilter();
+    });
+    $('#dataFilterCheckbox').on('change', () => {
+      specimenTable.draw();
+      crossFilter();
+    });
+    $('#releaseFilterCheckbox').on('change', () => {
+      specimenTable.draw();
+      crossFilter();
+    });
+
+    // Init tables
+    specimenTable = $('#specimenTable').DataTable({
+      dom: 'lBrtip',
+      lengthMenu: [ [10,25,50,100,-1], [10,25,50,100,'All'] ],
+      buttons: [
+         { extend: 'csv', text: 'Download csv' }  // ← custom label
+       ],
+      // this fires once for each row as it’s created
+      createdRow: function(row, data) {
+        // `data` is the array of cell values for this row
+        // Release is in the 14th column (zero-based index 13)
+        if (data[13] && data[13].trim() !== '') {
+          // apply a light green background (or whatever shade you prefer)
+          $(row).css('background-color', '#dff0d8');
+        }
+      },
+      initComplete() {this.api().columns().every(function(i){$('input',this.footer()).on('keyup change clear',()=>{specimenTable.column(i).search($('input',this.footer()).val()).draw();crossFilter();});});}
+    });
+    magTable=$('#magTable').DataTable({
+      dom:'lBrtip',
+      lengthMenu: [ [10,25,50,100,-1], [10,25,50,100,'All'] ],
+      buttons: [
+         { extend: 'csv', text: 'Download csv' }  // ← custom label
+       ],
+      initComplete(){this.api().columns().every(function(i){$('input',this.footer()).on('keyup change clear',()=>{magTable.column(i).search($('input',this.footer()).val()).draw();crossFilter();});});}});
+    resetFilters();
+  });
+
+  // (somewhere after you load specimensData and magsData)
+  const zeroMagIDs = new Set(
+    specimensData
+      .filter(s => !magsData.some(m => m.specimenID === s.specimenID))
+      .map(s => s.specimenID)
+  );
+
+  function crossFilter() {
+    // 1) collect all specimenIDs surviving the specimen‐table filters
+    const specSet = new Set();
+    specimenTable.rows({ filter: 'applied' }).every(function() {
+      specSet.add(this.data()[0]);
+    });
+
+    // 2) detect only MAG‐table filters
+    let magFilterApplied = false;
+    // … your existing completeness/contamination/text‐search checks here …
+
+    // 3) now build activeIDs
+    if (!magFilterApplied) {
+      activeIDs = Array.from(specSet);
+    } else {
+      // collect specimenIDs from the filtered MAG table
+      const magSpecSet = new Set();
+      magTable.rows({ filter: 'applied' }).every(function() {
+        magSpecSet.add(this.data()[1]);
+      });
+
+      // **union** mag‐filtered specimens **and** zero‐MAG specimens
+      activeIDs = Array.from(specSet).filter(id =>
+        magSpecSet.has(id) || zeroMagIDs.has(id)
+      );
+    }
+
+    // 4) re‐draw both tables + map
+    specimenTable.draw();
+    magTable.draw();
+    updateMap( activeIDs.length
+      ? specimensData.filter(d => activeIDs.includes(d.specimenID))
+      : [] );
+  }
+  function updateMap(data) {
+    // 1) Group by exact lon,lat
+    const groups = {};
+    data.forEach(d => {
+      const key = `${d.Longitude},${d.Latitude}`;
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(d);
+    });
+
+    // 2) Build line and marker arrays
+    const lineLon = [], lineLat = [];
+    const mLon = [], mLat = [], mCol = [], mText = [], mCustom = [];
+
+    Object.values(groups).forEach(group => {
+      const { Longitude: lon0, Latitude: lat0 } = group[0];
+      if (group.length === 1) {
+        // Single point → plot normally
+        mLon.push(lon0);
+        mLat.push(lat0);
+        mCol.push(speciesColors[group[0].Species]);
+        mText.push(group[0].Species);
+        mCustom.push(group[0].specimenID);
+      } else {
+        // Overlap → spiderfy radially
+        const N = group.length;
+        const radius = 0.005; // degrees; adjust as needed
+        group.forEach((d,i) => {
+          const θ = 2 * Math.PI * i / N;
+          const lon = lon0 + radius * Math.cos(θ);
+          const lat = lat0 + radius * Math.sin(θ);
+
+          // line from real location to spider point
+          lineLon.push(lon0, lon, null);
+          lineLat.push(lat0, lat, null);
+
+          // jittered marker
+          mLon.push(lon);
+          mLat.push(lat);
+          mCol.push(speciesColors[d.Species]);
+          mText.push(d.Species);
+          mCustom.push(d.specimenID);
+        });
+      }
+    });
+
+    // 3) Two‐trace plot: lines + markers
+    const traces = [
+      {
+        type: 'scattermapbox',
+        mode: 'lines',
+        lon: lineLon,
+        lat: lineLat,
+        line: { color: '#666', width: 1 },
+        hoverinfo: 'none'
+      },
+      {
+        type: 'scattermapbox',
+        mode: 'markers',
+        lon: mLon,
+        lat: mLat,
+        marker: { size: 10, color: mCol, opacity: 0.8 },
+        text: mText,
+        customdata: mCustom,
+        text: mText,           // still your species
+        customdata: mCustom,   // specimenID
+        hovertemplate:
+          '<b>Specimen ID:</b> %{customdata}<br>' +
+          '<b>Species:</b> %{text}<extra></extra>'
+      }
+    ];
+
+    // 4) Re‐use your existing layout and event‐binding
+    const layout = {
+      mapbox: { style: 'open-street-map', center: { lat: 40, lon: 10 }, zoom: 1 },
+      margin: { t:0, b:0, l:0, r:0 },
+      height: 600,
+      showlegend: false
+    };
+
+    Plotly.newPlot('map', traces, layout).then(() => {
+      const m = document.getElementById('map');
+      m.on('plotly_selected', evt => {
+        activeIDs = evt.points.length ? evt.points.map(pt => pt.customdata) : null;
+        specimenTable.draw();
+        magTable.draw();
+        updateMap(activeIDs
+          ? specimensData.filter(d => activeIDs.includes(d.specimenID))
+          : specimensData
+        );
+      });
+      m.on('plotly_click', evt => {
+        activeIDs = [evt.points[0].customdata];
+        specimenTable.draw();
+        magTable.draw();
+        updateMap(specimensData.filter(d => activeIDs.includes(d.specimenID)));
+      });
+    });
+  }  function resetFilters(){$('#speciesFilter').val('');$('#biomeFilter').val('');$('#sampleTypeFilter').val('');$('#dataFilterCheckbox').prop('checked', false);$('#releaseFilterCheckbox').prop('checked', false);activeIDs=null;specimenTable.search('').columns().search('').draw();magTable.search('').columns().search('').draw();$('#sliderSpecData').slider('values',[$('#sliderSpecData').slider('option','min'),$('#sliderSpecData').slider('option','max')]);$('#labelSpecDataMin').text($('#sliderSpecData').slider('values')[0]);$('#labelSpecDataMax').text($('#sliderSpecData').slider('values')[1]);$('#sliderSpecMag').slider('values',[$('#sliderSpecMag').slider('option','min'),$('#sliderSpecMag').slider('option','max')]);$('#labelSpecMagMin').text($('#sliderSpecMag').slider('values')[0]);$('#labelSpecMagMax').text($('#sliderSpecMag').slider('values')[1]);$('#sliderMagComp').slider('values',[$('#sliderMagComp').slider('option','min'),$('#sliderMagComp').slider('option','max')]);$('#labelMagCompMin').text($('#sliderMagComp').slider('values')[0]);$('#labelMagCompMax').text($('#sliderMagComp').slider('values')[1]);$('#sliderMagCont').slider('values',[$('#sliderMagCont').slider('option','min'),$('#sliderMagCont').slider('option','max')]);$('#labelMagContMin').text($('#sliderMagCont').slider('values')[0]);$('#labelMagContMax').text($('#sliderMagCont').slider('values')[1]);updateMap(specimensData);}
+</script>
+
+</body>
+</html>

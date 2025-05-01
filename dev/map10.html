@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Samples and Locations Map</title>
+
+  <!-- Plotly -->
+  <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+
+  <!-- jQuery and DataTables -->
+  <script src="https://code.jquery.com/jquery-3.5.1.js"></script>
+  <link rel="stylesheet" href="https://cdn.datatables.net/1.10.21/css/jquery.dataTables.min.css">
+  <script src="https://cdn.datatables.net/1.10.21/js/jquery.dataTables.min.js"></script>
+
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 40px;
+    }
+    #map {
+      height: 600px;
+      margin-bottom: 50px;
+    }
+    .button-container {
+      margin-bottom: 20px;
+    }
+    table.dataTable tfoot input {
+      width: 100%;
+      box-sizing: border-box;
+    }
+  </style>
+</head>
+<body>
+
+<h1>Samples and Locations Map</h1>
+
+<div id="map"></div>
+
+<div class="button-container">
+  <button onclick="resetFilters()">Reset Filters</button>
+</div>
+
+<h2>Locations Table</h2>
+<table id="locationTable" class="display">
+  <thead>
+    <tr>
+      <th>LocationID</th>
+      <th>Species</th>
+      <th>Latitude</th>
+      <th>Longitude</th>
+    </tr>
+  </thead>
+  <tfoot>
+    <tr>
+      <th>LocationID</th>
+      <th>Species</th>
+      <th>Latitude</th>
+      <th>Longitude</th>
+    </tr>
+  </tfoot>
+  <tbody></tbody>
+</table>
+
+<h2>Samples Table</h2>
+<table id="sampleTable" class="display">
+  <thead>
+    <tr>
+      <th>SampleID</th>
+      <th>LocationID</th>
+      <th>SampleType</th>
+      <th>Value</th>
+    </tr>
+  </thead>
+  <tfoot>
+    <tr>
+      <th>SampleID</th>
+      <th>LocationID</th>
+      <th>SampleType</th>
+      <th>Value</th>
+    </tr>
+  </tfoot>
+  <tbody></tbody>
+</table>
+
+<script>
+  var locationsData = [
+    { LocationID: 'LOC001', Species: 'Bear', Latitude: 37.7749, Longitude: -122.4194 },
+    { LocationID: 'LOC002', Species: 'Deer', Latitude: 34.0522, Longitude: -118.2437 },
+    { LocationID: 'LOC003', Species: 'Fox', Latitude: 40.7128, Longitude: -74.0060 },
+    { LocationID: 'LOC004', Species: 'Rabbit', Latitude: 41.8781, Longitude: -87.6298 },
+    { LocationID: 'LOC005', Species: 'Bear', Latitude: 47.6062, Longitude: -122.3321 }
+  ];
+
+  var samplesData = [
+    { SampleID: 'SAMP001', LocationID: 'LOC001', SampleType: 'Water', Value: 7.1 },
+    { SampleID: 'SAMP002', LocationID: 'LOC001', SampleType: 'Soil', Value: 5.5 },
+    { SampleID: 'SAMP003', LocationID: 'LOC002', SampleType: 'Water', Value: 8.3 },
+    { SampleID: 'SAMP004', LocationID: 'LOC003', SampleType: 'Air', Value: 3.2 },
+    { SampleID: 'SAMP005', LocationID: 'LOC003', SampleType: 'Water', Value: 6.8 },
+    { SampleID: 'SAMP006', LocationID: 'LOC004', SampleType: 'Soil', Value: 4.9 },
+    { SampleID: 'SAMP007', LocationID: 'LOC005', SampleType: 'Air', Value: 2.5 }
+  ];
+
+  var locationTable, sampleTable;
+  var activeLocationIDs = null;
+
+  $(document).ready(function() {
+    // Populate Locations Table
+    var locationBody = $('#locationTable tbody');
+    locationsData.forEach(function(row) {
+      locationBody.append(
+        `<tr>
+          <td>${row.LocationID}</td>
+          <td>${row.Species}</td>
+          <td>${row.Latitude}</td>
+          <td>${row.Longitude}</td>
+        </tr>`
+      );
+    });
+
+    // Populate Samples Table
+    var sampleBody = $('#sampleTable tbody');
+    samplesData.forEach(function(row) {
+      sampleBody.append(
+        `<tr>
+          <td>${row.SampleID}</td>
+          <td>${row.LocationID}</td>
+          <td>${row.SampleType}</td>
+          <td>${row.Value}</td>
+        </tr>`
+      );
+    });
+
+    // Add per-column search boxes
+    $('#locationTable tfoot th, #sampleTable tfoot th').each(function() {
+      var title = $(this).text();
+      $(this).html('<input type="text" placeholder="Search ' + title + '" />');
+    });
+
+    locationTable = $('#locationTable').DataTable({
+      initComplete: function() {
+        this.api().columns().every(function() {
+          var that = this;
+          $('input', this.footer()).on('keyup change clear', function() {
+            if (that.search() !== this.value) {
+              that.search(this.value).draw();
+            }
+          });
+        });
+      }
+    });
+
+    sampleTable = $('#sampleTable').DataTable({
+      initComplete: function() {
+        this.api().columns().every(function() {
+          var that = this;
+          $('input', this.footer()).on('keyup change clear', function() {
+            if (that.search() !== this.value) {
+              that.search(this.value).draw();
+            }
+          });
+        });
+      }
+    });
+
+    $.fn.dataTable.ext.search.push(
+      function(settings, data, dataIndex) {
+        if (settings.nTable.id !== 'locationTable') return true;
+
+        var locationID = data[0];
+
+        if (activeLocationIDs !== null) {
+          return activeLocationIDs.includes(locationID);
+        }
+        return true;
+      }
+    );
+
+    updateMap(locationsData);
+
+    // When locations table is filtered, update map
+    locationTable.on('search.dt', function() {
+      var filteredData = [];
+      locationTable.rows({ filter: 'applied' }).every(function() {
+        var row = this.data();
+        filteredData.push({
+          LocationID: row[0],
+          Species: row[1],
+          Latitude: parseFloat(row[2]),
+          Longitude: parseFloat(row[3])
+        });
+      });
+      updateMap(filteredData);
+    });
+  });
+
+  function updateMap(data) {
+    var speciesColors = {
+      'Bear': '#636EFA',
+      'Deer': '#EF553B',
+      'Fox': '#00CC96',
+      'Rabbit': '#AB63FA'
+    };
+
+    var markerColors = data.map(d => speciesColors[d.Species] || '#AAAAAA');
+
+    var trace = {
+      type: 'scattermapbox',
+      lat: data.map(d => d.Latitude),
+      lon: data.map(d => d.Longitude),
+      text: data.map(d => d.LocationID),
+      customdata: data.map(d => d.LocationID),
+      mode: 'markers',
+      marker: {
+        size: 12,
+        color: markerColors
+      },
+      cluster: {
+        enabled: true,
+        maxzoom: 14,
+        step: 50
+      }
+    };
+
+    var mapLayout = {
+      mapbox: {
+        style: 'open-street-map',
+        center: { lat: 39, lon: -98 },
+        zoom: 3
+      },
+      margin: { t: 0, b: 0, l: 0, r: 0 },
+      height: 600
+    };
+
+    Plotly.newPlot('map', [trace], mapLayout).then(function(plot) {
+      var mapDiv = document.getElementById('map');
+
+      mapDiv.on('plotly_selected', function(eventData) {
+        if (eventData && eventData.points.length > 0) {
+          activeLocationIDs = eventData.points.map(pt => pt.customdata);
+        } else {
+          activeLocationIDs = null;
+        }
+        locationTable.draw();
+      });
+
+      mapDiv.on('plotly_click', function(eventData) {
+        if (eventData && eventData.points.length > 0) {
+          activeLocationIDs = [eventData.points[0].customdata];
+          locationTable.draw();
+        }
+      });
+    });
+  }
+
+  function resetFilters() {
+    activeLocationIDs = null;
+    locationTable.search('').columns().search('').draw();
+    sampleTable.search('').columns().search('').draw();
+    updateMap(locationsData);
+  }
+</script>
+
+</body>
+</html>

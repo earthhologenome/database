@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Cross-Filtered Map and Tables with Range Sliders and Labels</title>
+
+  <!-- Plotly -->
+  <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+
+  <!-- jQuery, jQuery UI, and DataTables -->
+  <script src="https://code.jquery.com/jquery-3.5.1.js"></script>
+  <link rel="stylesheet" href="https://code.jquery.com/ui/1.12.1/themes/base/jquery-ui.css">
+  <link rel="stylesheet" href="https://cdn.datatables.net/1.10.21/css/jquery.dataTables.min.css">
+  <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.min.js"></script>
+  <script src="https://cdn.datatables.net/1.10.21/js/jquery.dataTables.min.js"></script>
+
+  <style>
+    body { font-family: Arial, sans-serif; margin: 40px; }
+    #map { height: 600px; margin-bottom: 20px; }
+    .filter-container { margin-bottom: 20px; }
+    .button-container { margin-bottom: 20px; }
+    table.dataTable tfoot div.slider { margin: 5px 0; }
+    table.dataTable tfoot .slider-labels { font-size: 0.9em; margin-bottom: 8px; }
+    table.dataTable tfoot .slider-labels span { margin: 0 4px; }
+    th.hidden, td.hidden { display: none; }
+    .sample-tag { display: inline-block; padding: 2px 6px; margin-right: 4px; border-radius: 4px; color: #fff; font-size: 0.9em; }
+  </style>
+</head>
+<body>
+
+<h1>Cross-Filtered Map and Tables with Range Sliders and Labels</h1>
+
+<div id="map"></div>
+
+<div class="filter-container">
+  <label for="speciesFilter">Filter by Species: </label>
+  <select id="speciesFilter">
+    <option value="">All Species</option>
+  </select>
+</div>
+
+<div class="button-container">
+  <button onclick="resetFilters()">Reset Filters</button>
+</div>
+
+<h2>Specimen Table</h2>
+<table id="specimenTable" class="display">
+  <thead>
+    <tr>
+      <th class="hidden">LocationID</th>
+      <th>Species</th>
+      <th>Family</th>
+      <th>Order</th>
+      <th>Country</th>
+      <th>Sample Type</th>
+      <th>Total Data</th>
+    </tr>
+  </thead>
+  <tfoot>
+    <tr>
+      <th class="hidden"></th>
+      <th>Species</th>
+      <th>Family</th>
+      <th>Order</th>
+      <th>Country</th>
+      <th>Sample Type</th>
+      <th>
+        <div class="slider-labels"><span id="labelSpec6Min"></span>–<span id="labelSpec6Max"></span></div>
+        <div id="sliderSpec6" class="slider"></div>
+      </th>
+    </tr>
+  </tfoot>
+  <tbody></tbody>
+</table>
+
+<h2>MAG Table</h2>
+<table id="magTable" class="display">
+  <thead>
+    <tr>
+      <th>MAGID</th>
+      <th class="hidden">LocationID</th>
+      <th>Species</th>
+      <th>Family</th>
+      <th>Order</th>
+      <th>Class</th>
+      <th>Phylum</th>
+      <th>Completeness</th>
+      <th>Contamination</th>
+      <th>Link</th>
+    </tr>
+  </thead>
+  <tfoot>
+    <tr>
+      <th>MAGID</th>
+      <th class="hidden"></th>
+      <th>Species</th>
+      <th>Family</th>
+      <th>Order</th>
+      <th>Class</th>
+      <th>Phylum</th>
+      <th>
+        <div class="slider-labels"><span id="labelMag7Min"></span>–<span id="labelMag7Max"></span></div>
+        <div id="sliderMag7" class="slider"></div>
+      </th>
+      <th>
+        <div class="slider-labels"><span id="labelMag8Min"></span>–<span id="labelMag8Max"></span></div>
+        <div id="sliderMag8" class="slider"></div>
+      </th>
+      <th>Link</th>
+    </tr>
+  </tfoot>
+  <tbody></tbody>
+</table>
+
+<script>
+  var typeColors = { 'Tissue':'#5cb85c','Blood':'#d9534f','Water':'#5bc0de','Soil':'#f0ad4e','Air':'#428bca','Fur':'#9b59b6' };
+  var specimensData = [
+    { LocationID:'LOC001',Species:'Bear',Family:'Ursidae',Order:'Carnivora',Country:'USA',SampleType:'Tissue,Blood',TotalData:120,Latitude:37.7749,Longitude:-122.4194 },
+    { LocationID:'LOC002',Species:'Deer',Family:'Cervidae',Order:'Artiodactyla',Country:'USA',SampleType:'Blood',TotalData:85,Latitude:34.0522,Longitude:-118.2437 },
+    { LocationID:'LOC003',Species:'Fox',Family:'Canidae',Order:'Carnivora',Country:'USA',SampleType:'Fur,Water',TotalData:60,Latitude:40.7128,Longitude:-74.0060 },
+    { LocationID:'LOC004',Species:'Rabbit',Family:'Leporidae',Order:'Lagomorpha',Country:'USA',SampleType:'Tissue',TotalData:45,Latitude:41.8781,Longitude:-87.6298 }
+  ];
+  var magsData = [
+    { MAGID:'MAG001',LocationID:'LOC001',Species:'Bear',Family:'Lactobacillaceae',Order:'Carnivora',Class:'Mammalia',Phylum:'Chordata',Completeness:95,Contamination:2.5,Link:'<a href="#" target="_blank">Details</a>' },
+    { MAGID:'MAG002',LocationID:'LOC002',Species:'Deer',Family:'Lactobacillaceae',Order:'Artiodactyla',Class:'Mammalia',Phylum:'Chordata',Completeness:90,Contamination:1.8,Link:'<a href="#" target="_blank">Details</a>' },
+    { MAGID:'MAG003',LocationID:'LOC003',Species:'Fox',Family:'Pseudomonaceae',Order:'Carnivora',Class:'Mammalia',Phylum:'Chordata',Completeness:92,Contamination:3.1,Link:'<a href="#" target="_blank">Details</a>' },
+    { MAGID:'MAG004',LocationID:'LOC004',Species:'Rabbit',Family:'Pseudomonaceae',Order:'Lagomorpha',Class:'Mammalia',Phylum:'Chordata',Completeness:88,Contamination:2.2,Link:'<a href="#" target="_blank">Details</a>' }
+  ];
+  var specimenTable, magTable;
+  var activeLocationIDs = null;
+
+  $(document).ready(function(){
+    // Populate tables
+    specimensData.forEach(function(r){
+      var tags = r.SampleType.split(',').map(function(t){ return '<span class="sample-tag" style="background-color:' + (typeColors[t.trim()]||'#999') + '">' + t + '</span>'; }).join(' ');
+      $('#specimenTable tbody').append('<tr><td class="hidden">'+r.LocationID+'</td><td>'+r.Species+'</td><td>'+r.Family+'</td><td>'+r.Order+'</td><td>'+r.Country+'</td><td>'+tags+'</td><td>'+r.TotalData+'</td></tr>');
+    });
+    magsData.forEach(function(r){
+      $('#magTable tbody').append('<tr><td>'+r.MAGID+'</td><td class="hidden">'+r.LocationID+'</td><td>'+r.Species+'</td><td>'+r.Family+'</td><td>'+r.Order+'</td><td>'+r.Class+'</td><td>'+r.Phylum+'</td><td>'+r.Completeness+'</td><td>'+r.Contamination+'</td><td>'+r.Link+'</td></tr>');
+    });
+
+    // Footer - text inputs and sliders
+    $('#specimenTable tfoot th').not(':eq(0),:eq(6)').html(function(){ return '<input type="text" placeholder="Search '+$(this).text()+'" />'; });
+    $('#magTable tfoot th').not(':eq(1),:eq(7),:eq(8)').html(function(){ return '<input type="text" placeholder="Search '+$(this).text()+'" />'; });
+
+    // Instantiate sliders with labels
+    var tdVals = specimensData.map(function(d){return d.TotalData;});
+    $('#sliderSpec6').slider({
+      range:true,
+      min:Math.min.apply(null,tdVals),
+      max:Math.max.apply(null,tdVals),
+      values:[Math.min.apply(null,tdVals),Math.max.apply(null,tdVals)],
+      slide:function(event,ui){
+        $('#labelSpec6Min').text(ui.values[0]);
+        $('#labelSpec6Max').text(ui.values[1]);
+        specimenTable.draw();
+        crossFilter();
+      }
+    });
+    // initialize labels
+    var specInit = $('#sliderSpec6').slider('values');
+    $('#labelSpec6Min').text(specInit[0]); $('#labelSpec6Max').text(specInit[1]);
+
+    var compVals = magsData.map(function(d){return d.Completeness;});
+    $('#sliderMag7').slider({
+      range:true,
+      min:Math.min.apply(null,compVals),
+      max:Math.max.apply(null,compVals),
+      values:[Math.min.apply(null,compVals),Math.max.apply(null,compVals)],
+      slide:function(event,ui){
+        $('#labelMag7Min').text(ui.values[0]);
+        $('#labelMag7Max').text(ui.values[1]);
+        magTable.draw();
+        crossFilter();
+      }
+    });
+    var mag7Init = $('#sliderMag7').slider('values');
+    $('#labelMag7Min').text(mag7Init[0]); $('#labelMag7Max').text(mag7Init[1]);
+
+    var contVals = magsData.map(function(d){return d.Contamination;});
+    $('#sliderMag8').slider({
+      range:true,
+      min:Math.min.apply(null,contVals),
+      max:Math.max.apply(null,contVals),
+      values:[Math.min.apply(null,contVals),Math.max.apply(null,contVals)],
+      slide:function(event,ui){
+        $('#labelMag8Min').text(ui.values[0]);
+        $('#labelMag8Max').text(ui.values[1]);
+        magTable.draw();
+        crossFilter();
+      }
+    });
+    var mag8Init = $('#sliderMag8').slider('values');
+    $('#labelMag8Min').text(mag8Init[0]); $('#labelMag8Max').text(mag8Init[1]);
+
+    // Global range filter
+    $.fn.dataTable.ext.search.push(function(settings,data){
+      if(settings.nTable.id==='specimenTable'){
+        var sp = $('#sliderSpec6').slider('values'), v = parseFloat(data[6])||0;
+        if(v < sp[0] || v > sp[1]) return false;
+      }
+      if(settings.nTable.id==='magTable'){
+        var ms = $('#sliderMag7').slider('values'), c = parseFloat(data[7])||0;
+        if(c < ms[0] || c > ms[1]) return false;
+        var cs = $('#sliderMag8').slider('values'), t = parseFloat(data[8])||0;
+        if(t < cs[0] || t > cs[1]) return false;
+      }
+      return true;
+    });
+
+    // Cross-filter global filter
+    $.fn.dataTable.ext.search.push(function(settings,data){
+      if(!activeLocationIDs) return true;
+      if(settings.nTable.id==='specimenTable') return activeLocationIDs.includes(data[0]);
+      if(settings.nTable.id==='magTable') return activeLocationIDs.includes(data[1]);
+      return true;
+    });
+
+    // Initialize DataTables
+    specimenTable = $('#specimenTable').DataTable({
+      initComplete:function(){
+        this.api().columns().every(function(i){
+          $('input',this.footer()).on('keyup change clear',function(){ specimenTable.column(i).search(this.value).draw(); crossFilter(); });
+        });
+      }
+    });
+    magTable = $('#magTable').DataTable({
+      initComplete:function(){
+        this.api().columns().every(function(i){
+          $('input',this.footer()).on('keyup change clear',function(){ magTable.column(i).search(this.value).draw(); crossFilter(); });
+        });
+      }
+    });
+
+    // Species dropdown
+    var species = Array.from(new Set(specimensData.map(function(d){return d.Species;})));
+    species.forEach(function(s){ $('#speciesFilter').append('<option value="'+s+'">'+s+'</option>'); });
+    $('#speciesFilter').on('change',function(){ specimenTable.column(1).search(this.value).draw(); crossFilter(); });
+
+    // Ensure full data on load
+    resetFilters();
+  });
+
+  function crossFilter(){
+    var locs=new Set(), mags=new Set();
+    specimenTable.rows({filter:'applied'}).every(function(){ locs.add(this.data()[0]); });
+    magTable.rows({filter:'applied'}).every(function(){ mags.add(this.data()[1]); });
+    activeLocationIDs = Array.from(locs).filter(function(id){ return mags.has(id); });
+    specimenTable.draw(); magTable.draw();
+    var data = activeLocationIDs.length ? specimensData.filter(function(d){ return activeLocationIDs.includes(d.LocationID); }) : specimensData;
+    updateMap(data);
+  }
+
+  function updateMap(data){
+    var colors={'Bear':'#636EFA','Deer':'#EF553B','Fox':'#00CC96','Rabbit':'#AB63FA'};
+    var trace = { type:'scattermapbox', lat:data.map(function(d){return d.Latitude;}), lon:data.map(function(d){return d.Longitude;}), text:data.map(function(d){return d.Species;}), customdata:data.map(function(d){return d.LocationID;}), mode:'markers', marker:{ size:12, color:data.map(function(d){return colors[d.Species]||'#AAAAAA';})}, cluster:{ enabled:true, maxzoom:14, step:50 } };
+    var layout = { mapbox:{ style:'open-street-map', center:{ lat:39, lon:-98 }, zoom:3 }, margin:{ t:0,b:0,l:0,r:0 }, height:600 };
+    Plotly.newPlot('map',[trace],layout).then(function(){
+      var m = document.getElementById('map');
+      m.on('plotly_selected',function(evt){ activeLocationIDs = evt && evt.points.length ? evt.points.map(function(pt){return pt.customdata;}) : null; specimenTable.draw(); magTable.draw(); updateMap(activeLocationIDs ? specimensData.filter(function(d){return activeLocationIDs.includes(d.LocationID);}) : specimensData); });
+      m.on('plotly_click',function(evt){ activeLocationIDs = evt && evt.points.length ? [evt.points[0].customdata] : null; specimenTable.draw(); magTable.draw(); updateMap(activeLocationIDs ? specimensData.filter(function(d){return activeLocationIDs.includes(d.LocationID);}) : specimensData); });
+    });
+  }
+
+  function resetFilters(){
+    $('#speciesFilter').val('');
+    activeLocationIDs = null;
+    specimenTable.search('').columns().search('').draw();
+    magTable.search('').columns().search('').draw();
+    // reset sliders to full range
+    $('#sliderSpec6').slider('values', [$('#sliderSpec6').slider('option','min'), $('#sliderSpec6').slider('option','max')]);
+    var specVals = $('#sliderSpec6').slider('values'); $('#labelSpec6Min').text(specVals[0]); $('#labelSpec6Max').text(specVals[1]);
+    $('#sliderMag7').slider('values', [$('#sliderMag7').slider('option','min'), $('#sliderMag7').slider('option','max')]);
+    var mag7v = $('#sliderMag7').slider('values'); $('#labelMag7Min').text(mag7v[0]); $('#labelMag7Max').text(mag7v[1]);
+    $('#sliderMag8').slider('values', [$('#sliderMag8').slider('option','min'), $('#sliderMag8').slider('option','max')]);
+    var mag8v = $('#sliderMag8').slider('values'); $('#labelMag8Min').text(mag8v[0]); $('#labelMag8Max').text(mag8v[1]);
+    updateMap(specimensData);
+  }
+</script>
+
+</body>
+</html>

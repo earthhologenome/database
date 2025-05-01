@@ -68,6 +68,7 @@ def main():
         "Host data (GB)":               "HostData",
         "Metagenomic data (GB)":        "MetagenomicData",
         "Release":                      "Release",
+        "ena_run_accession":            "Accessions",
         "Latitude reduced":             "Latitude",
         "Longitude reduced":            "Longitude"
     }
@@ -81,7 +82,7 @@ def main():
     spec_fields = [
         "specimenID", "Species", "Family", "Order", "Class",
         "Length", "Weight", "Country", "Biome", "SampleType",
-        "TotalData", "HostData", "MetagenomicData", "Release", "Latitude", "Longitude"
+        "TotalData", "HostData", "MetagenomicData", "Release", "Accessions", "Latitude", "Longitude"
     ]
     spec_types = {f: 'str' for f in spec_fields}
     spec_types.update({
@@ -91,6 +92,7 @@ def main():
         "TotalData":        'num',
         "HostData":         'num',
         "MetagenomicData":  'num',
+        "Accessions":       'arr',
         "Latitude":         'num',
         "Longitude":        'num'
     })
